@@ -66,7 +66,7 @@ func TestNewClientTLS(t *testing.T) {
 	keyFile := testfile(t, testKeyFile)
 	caCertFile := testfile(t, testCaCertFile)
 
-	cfg, err := NewClientTLS(certFile, keyFile, caCertFile)
+	cfg, err := NewClientTLS(certFile, keyFile, caCertFile, RenegotiateNever)
 	if err != nil {
 		t.Error(err)
 	}
@@ -81,7 +81,7 @@ func TestNewClientTLS(t *testing.T) {
 		t.Fatalf("mismatch tls RootCAs, expecting non-nil")
 	}
 
-	cfg, err = NewClientTLS("", "", caCertFile)
+	cfg, err = NewClientTLS("", "", caCertFile, RenegotiateNever)
 	if err != nil {
 		t.Error(err)
 	}
@@ -96,7 +96,7 @@ func TestNewClientTLS(t *testing.T) {
 		t.Fatalf("mismatch tls RootCAs, expecting non-nil")
 	}
 
-	cfg, err = NewClientTLS(certFile, keyFile, "")
+	cfg, err = NewClientTLS(certFile, keyFile, "", RenegotiateNever)
 	if err != nil {
 		t.Error(err)
 	}
