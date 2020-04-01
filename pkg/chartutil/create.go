@@ -92,13 +92,23 @@ const defaultValues = `# Default values for %s.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Default values for images used in the chart; all these values can be overridden in the 
+# 'images' section for individual images
+global:
+  # imageRegistry: docker.io # Allows for easy re-location of all the images to a private registry
+  # imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
 replicaCount: 1
+images:
+  nginx:
+    name: nginx
+    originalNamespace: bitnami
+    tag: 1.16.1-debian-9-r105
+    digest: sha256:582aa10676417e79995989c0e06ffa8d48ced0cc2b9883669b0379ec9a7f45fb # Optional, to ensure image authenticity
+  busybox:
+    name: busybox
 
-image:
-  repository: nginx
-  pullPolicy: IfNotPresent
-
-imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
@@ -251,19 +261,15 @@ spec:
       labels:
         {{- include "<CHARTNAME>.selectorLabels" . | nindent 8 }}
     spec:
-    {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-    {{- end }}
+      {{- include "<CHARTNAME>.imagePullSecrets" . | indent 6 }}
       serviceAccountName: {{ include "<CHARTNAME>.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- include "<CHARTNAME>.registryImage" (dict "image" .Values.images.nginx "values" .Values) | nindent 10 }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 80
@@ -439,7 +445,109 @@ Create the name of the service account to use
     {{ default "default" .Values.serviceAccount.name }}
 {{- end -}}
 {{- end -}}
-`
+
+{{/*
+Create a registry image reference for use in a spec.
+Includes the 'image' and 'imagePullPolicy' keys.
+*/}}
+{{- define "<CHARTNAME>.registryImage" -}}
+image: {{ include "<CHARTNAME>.imageReference" . }}
+{{- $pullPolicy := include "<CHARTNAME>.imagePullPolicy" . -}}
+{{- if $pullPolicy }}
+{{ $pullPolicy }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The most complete image reference, including the
+registry address, repository, tag and digest when available.
+*/}}
+{{- define "<CHARTNAME>.imageReference" -}}
+{{ include "<CHARTNAME>.imagePath" . }}
+{{- if .image.tag -}}
+{{- printf ":%s" .image.tag -}}
+{{- end -}}
+{{- if .image.digest -}}
+{{- printf "@%s" .image.digest -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.imagePath" -}}
+{{- $registry := include "<CHARTNAME>.imageRegistry" . -}}
+{{- $namespace := include "<CHARTNAME>.imageNamespace" . -}}
+{{- printf "%s/%s/%s" $registry $namespace .image.name -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.imageRegistry" -}}
+{{- if or (and .image.useOriginalRegistry (empty .image.registry)) (and .values.useOriginalRegistry (empty .values.imageRegistry)) -}}
+{{- include "<CHARTNAME>.originalImageRegistry" . -}}
+{{- else -}}
+{{- include "<CHARTNAME>.customImageRegistry" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.originalImageRegistry" -}}
+{{- printf (coalesce .image.originalRegistry .values.originalImageRegistry "docker.io") -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.customImageRegistry" -}}
+{{- printf (coalesce .image.registry .values.imageRegistry .values.global.imageRegistry (include "<CHARTNAME>.originalImageRegistry" .)) -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.imageNamespace" -}}
+{{- if or (and .image.useOriginalNamespace (empty .image.namespace)) (and .values.useOriginalNamespace (empty .values.imageNamespace)) -}}
+{{- include "<CHARTNAME>.originalImageNamespace" . -}}
+{{- else -}}
+{{- include "<CHARTNAME>.customImageNamespace" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.originalImageNamespace" -}}
+{{- printf (coalesce .image.originalNamespace .values.originalImageNamespace "library") -}}
+{{- end -}}
+
+{{- define "<CHARTNAME>.customImageNamespace" -}}
+{{- printf (coalesce .image.namespace .values.imageNamespace .values.global.imageNamespace (include "<CHARTNAME>.originalImageNamespace" .)) -}}
+{{- end -}}
+
+{{/*
+Specify the image pull policy
+*/}}
+{{- define "<CHARTNAME>.imagePullPolicy" -}}
+{{- $policy := coalesce .image.pullPolicy .values.imagePullPolicy .values.global.imagePullPolicy -}}
+{{- if $policy -}}
+imagePullPolicy: "{{- $policy -}}"
+{{- end -}}
+{{- end -}}
+
+{{/*
+Use the image pull secrets. All of the specified secrets will be used
+*/}}
+{{- define "<CHARTNAME>.imagePullSecrets" -}}
+{{- $secrets := .Values.global.imagePullSecrets -}}
+{{- range $_, $chartSecret := .Values.imagePullSecrets -}}
+{{- if $secrets -}}
+{{- $secrets = append $secrets $chartSecret -}}
+{{- else -}}
+{{- $secrets = list $chartSecret -}}
+{{- end -}}
+{{- end -}}
+{{- range $_, $image := .Values.images -}}
+{{- range $_, $s := $image.pullSecrets -}}
+{{- if $secrets -}}
+{{- $secrets = append $secrets $s -}}
+{{- else -}}
+{{- $secrets = list $s -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $secrets }}
+imagePullSecrets:
+{{- range $secrets }}
+- name: {{ . }}
+{{- end }}
+{{- end -}}
+{{- end -}}`
 
 const defaultTestConnection = `apiVersion: v1
 kind: Pod
@@ -452,7 +560,7 @@ metadata:
 spec:
   containers:
     - name: wget
-      image: busybox
+      {{- include "<CHARTNAME>.registryImage" (dict "image" .Values.images.busybox "values" .Values) | nindent 6 }}
       command: ['wget']
       args: ['{{ include "<CHARTNAME>.fullname" . }}:{{ .Values.service.port }}']
   restartPolicy: Never
