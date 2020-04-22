@@ -17,6 +17,7 @@ limitations under the License.
 package action
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -291,6 +292,33 @@ func TestInstallRelease_NoHooks(t *testing.T) {
 	}
 
 	is.True(res.Hooks[0].LastRun.CompletedAt.IsZero(), "hooks should not run with no-hooks")
+}
+
+type TestPostRenderer struct {
+}
+
+func (tpr TestPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
+	if bytes.Contains(renderedManifests.Bytes(), []byte("helm.sh/hook")) {
+		renderedManifests.WriteString("\n# helm hook was post-processed\n")
+		return renderedManifests, nil
+	}
+	fmt.Println(renderedManifests)
+	return nil, fmt.Errorf("Hook was not post-processed")
+}
+
+// Test if a post-renderer receives hooks.
+func TestInstallRelease_PostRendererReceivesHooks(t *testing.T) {
+	instAction := installAction(t)
+
+	var pr TestPostRenderer
+	instAction.PostRenderer = pr
+
+	vals := map[string]interface{}{}
+	res, err := instAction.Run(buildChart(), vals)
+	if err != nil {
+		t.Fatalf("Failed install: %s", err)
+	}
+	fmt.Printf("%v", res)
 }
 
 func TestInstallRelease_FailedHooks(t *testing.T) {
