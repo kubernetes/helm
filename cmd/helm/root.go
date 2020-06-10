@@ -28,7 +28,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"helm.sh/helm/v3/internal/completion"
-	"helm.sh/helm/v3/internal/experimental/registry"
 	"helm.sh/helm/v3/pkg/action"
 )
 
@@ -170,15 +169,6 @@ func newRootCmd(actionConfig *action.Configuration, out io.Writer, args []string
 	)
 
 	// Add *experimental* subcommands
-	registryClient, err := registry.NewClient(
-		registry.ClientOptDebug(settings.Debug),
-		registry.ClientOptWriter(out),
-	)
-	if err != nil {
-		// TODO: don't panic here, refactor newRootCmd to return error
-		panic(err)
-	}
-	actionConfig.RegistryClient = registryClient
 	cmd.AddCommand(
 		newRegistryCmd(actionConfig, out),
 		newChartCmd(actionConfig, out),
