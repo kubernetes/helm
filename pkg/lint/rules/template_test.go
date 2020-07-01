@@ -180,11 +180,11 @@ kind: ConfigMap
 metadata:
   name: foo
 data:
-  myval1: {{default "val" .Values.mymap.key1 }}
-  myval2: {{default "val" .Values.mymap.key2 }}
+  myval1: {{  default "val" .Values.mymap.key1 }}
+  myval2: {{  default "val" .Values.mymap.key2 }}
 `
 
-// TestSTrictTemplatePrasingMapError is a regression test.
+// TestStrictTemplatePrasingMapError is a regression test.
 //
 // The template engine should not produce an error when a map in values.yaml does
 // not contain all possible keys.
@@ -223,6 +223,35 @@ func TestStrictTemplateParsingMapError(t *testing.T) {
 		t.Errorf("expected zero messages, got %d", len(linter.Messages))
 		for i, msg := range linter.Messages {
 			t.Logf("Message %d: %q", i, msg)
+		}
+	}
+}
+
+func TestValidateWhitespaceAroundTemplateDirectives(t *testing.T) {
+	for example, success := range map[string]bool{
+		"{{foo}}":                       false,
+		"{{-foo-}}":                     false,
+		"{{ foo-}}":                     false,
+		"{{ foo}}":                      false,
+		"{{-foo }}":                     false,
+		"{{foo }}":                      false,
+		"{{ foo }}":                     true,
+		"{{ default 2 .Values.foo }}":   true,
+		"{{default 2 .Values.foo }}":    false,
+		"{{ default 2 .Values.foo}}":    false,
+		`{{ default "}" .Values.foo }}`: true,
+		`{{- foo }}`:                    true,
+		`{{ legal }}{{illegal }}`:       false,
+		`{{ legal }}{{- legal -}}`:      true,
+		"{{\nlegal\n}}":                 true,
+		"{{/* comment */}}":             true,
+	} {
+		if err := validateWhitespaceAroundTemplateDirectives(example); (err == nil) != success {
+			st := "failure"
+			if success {
+				st = "success"
+			}
+			t.Errorf("Expected %s for %q", st, example)
 		}
 	}
 }
