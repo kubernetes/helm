@@ -18,6 +18,7 @@ package action
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"fmt"
 	"os"
 	"path"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
 
 	"helm.sh/helm/v3/internal/experimental/registry"
 	"helm.sh/helm/v3/pkg/chart"
@@ -44,6 +46,9 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"helm.sh/helm/v3/pkg/time"
 )
+
+// Temporary annotation is used to preseve template file name in post-rendering step.
+const tempAnnotationName = "helm.sh/postProcessFileName"
 
 // Timestamper is a function capable of producing a timestamp.Timestamper.
 //
@@ -156,6 +161,13 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 	}
 	notes := notesBuffer.String()
 
+	if pr != nil {
+		files, err = postProcessFiles(files, pr)
+		if err != nil {
+			return hs, b, notes, err
+		}
+	}
+
 	// Sort hooks, manifests, and partials. Only hooks and manifests are returned,
 	// as partials are not used after renderer.Render. Empty manifests are also
 	// removed here.
@@ -230,14 +242,144 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 		}
 	}
 
-	if pr != nil {
-		b, err = pr.Run(b)
-		if err != nil {
-			return hs, b, notes, errors.Wrap(err, "error while running post render on files")
+	return hs, b, notes, nil
+}
+
+// postProcessFiles sends files for post-processing.
+// Some post-processing may need all objects at once.
+// Therefore we concatenate all rendered files, post-process and split them back.
+// A temporary annotation is added to preserve template filename.
+func postProcessFiles(files map[string]string, pr postrender.PostRenderer) (map[string]string, error) {
+	if pr == nil {
+		return files, nil
+	}
+
+	b := bytes.NewBuffer(nil)
+
+	// Split the rendered files into documents and add the temp annotation.
+	reYamlDocumentSeparator := regexp.MustCompile(`\n---\s*\n`)
+	for fileName, fileContent := range files {
+		for _, document := range reYamlDocumentSeparator.Split(fileContent, -1) {
+			if strings.TrimSpace(document) == "" {
+				continue
+			}
+			b.WriteString("---\n")
+			documentYaml, err := yamlSetTemporaryAnnotation(document, fileName)
+			if err != nil {
+				return nil, fmt.Errorf("cannot prepare a file for post-process: %w", err)
+			}
+			b.Write(documentYaml)
 		}
 	}
 
-	return hs, b, notes, nil
+	// Run post-processing.
+	b, err := pr.Run(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "error while running post render on files")
+	}
+
+	postProcessedFiles := make(map[string]string)
+	// Split the post-processed stream into files.
+	for _, document := range reYamlDocumentSeparator.Split(b.String(), -1) {
+		if strings.TrimSpace(document) == "" {
+			continue
+		}
+		document, fileName, err := yamlCutTemporaryAnnotation(document)
+		if err != nil {
+			return nil, fmt.Errorf("cannot reconstruct a file after post-process: %w", err)
+		}
+		existingDocument, ok := postProcessedFiles[fileName]
+		if ok {
+			postProcessedFiles[fileName] = existingDocument + "\n---\n" + string(document)
+		} else {
+			postProcessedFiles[fileName] = string(document)
+		}
+	}
+
+	return postProcessedFiles, nil
+}
+
+// yamlSetTemporaryAnnotation adds temporary annotation in yaml kubernetess object
+func yamlSetTemporaryAnnotation(document, annotationValue string) ([]byte, error) {
+	// Unmarshal the document.
+	var documentMap map[string]interface{}
+	err := yaml.Unmarshal([]byte(document), &documentMap)
+	if err != nil {
+		return nil, err
+	}
+
+	// Take the annotations map.
+	metadata, ok := documentMap["metadata"].(map[string]interface{})
+	if !ok {
+		// Document has no metadata.
+		metadata = make(map[string]interface{})
+	}
+
+	annotations, ok := metadata["annotations"].(map[string]interface{})
+
+	if !ok {
+		annotations = make(map[string]interface{})
+	}
+	annotations[tempAnnotationName] = annotationValue
+
+	metadata["annotations"] = annotations
+	documentMap["metadata"] = metadata
+
+	documentYaml, err := yaml.Marshal(documentMap)
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal a yaml document: %v", err)
+	}
+
+	return documentYaml, nil
+}
+
+// yamlCutTemporaryAnnotation cuts out an annotation text from yaml kubernetess object
+func yamlCutTemporaryAnnotation(document string) ([]byte, string, error) {
+	// Unmarshal the document.
+	var documentMap map[string]interface{}
+	err := yaml.Unmarshal([]byte(document), &documentMap)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Take the annotations map.
+	metadata, ok := documentMap["metadata"].(map[string]interface{})
+	if !ok {
+		return []byte(document), fmt.Sprintf("document-has-no-metadata-%x.yaml", sha1.Sum([]byte(document))), nil
+	}
+
+	annotations, ok := metadata["annotations"].(map[string]interface{})
+
+	fileName := ""
+	if ok {
+		// Cut annotation.
+		fileName, ok = annotations[tempAnnotationName].(string)
+		if !ok {
+			return nil, "", fmt.Errorf("annotation %s value is not a string: %v", tempAnnotationName, annotations[tempAnnotationName])
+		}
+		delete(annotations, tempAnnotationName)
+	} else {
+		// Nothing to remove. Either post-renderer removed the annotation
+		// or a new k8s object was added without such annotation.
+		// Let's add a fake file name.
+		fileName = fmt.Sprintf("non-existent-%x.yaml", sha1.Sum([]byte(document)))
+	}
+
+	if len(annotations) > 0 {
+		// Write original annotations.
+		metadata["annotations"] = annotations
+	} else {
+		// Otherwise, remove empty annotations element from metadata.
+		delete(metadata, "annotations")
+	}
+	documentMap["metadata"] = metadata
+
+	documentYaml, err := yaml.Marshal(documentMap)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot marshal a yaml document: %v", err)
+	}
+
+	return documentYaml, fileName, nil
 }
 
 // RESTClientGetter gets the rest client
