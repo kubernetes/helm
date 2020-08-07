@@ -48,9 +48,10 @@ const postgreSQLDialect = "postgres"
 // SQLDriverName is the string name of this driver.
 const SQLDriverName = "SQL"
 
-const sqlReleaseTableName = "releases_v1"
-
 const (
+	sqlReleaseTableName = "releases_v1"
+	sqlLabelTableName   = "Labels_v1"
+
 	sqlReleaseTableKeyColumn        = "key"
 	sqlReleaseTableTypeColumn       = "type"
 	sqlReleaseTableBodyColumn       = "body"
@@ -61,6 +62,11 @@ const (
 	sqlReleaseTableOwnerColumn      = "owner"
 	sqlReleaseTableCreatedAtColumn  = "createdAt"
 	sqlReleaseTableModifiedAtColumn = "modifiedAt"
+
+	sqlLabelTableReleaseKeyColumn       = "releaseKey"
+	sqlLabelTableReleaseNamespaceColumn = "releaseNamespace"
+	sqlLabelTableKeyColumn              = "key"
+	sqlLabelTableValueColumn            = "value"
 )
 
 const (
@@ -150,6 +156,40 @@ func (s *SQL) ensureDBSetup() error {
 					`, sqlReleaseTableName),
 				},
 			},
+			{
+				Id: "Labels",
+				Up: []string{
+					fmt.Sprintf(`
+						CREATE TABLE %s (
+							%s VARCHAR(67),
+							%s VARCHAR(67),
+							%s VARCHAR(64), 
+							%s VARCHAR(67)
+						);
+						CREATE INDEX ON %s (%s, %s);
+						
+						GRANT ALL ON %s TO PUBLIC;
+
+						ALTER TABLE %s ENABLE ROW LEVEL SECURITY;
+					`,
+						sqlLabelTableName,
+						sqlLabelTableReleaseKeyColumn,
+						sqlLabelTableReleaseNamespaceColumn,
+						sqlLabelTableKeyColumn,
+						sqlLabelTableValueColumn,
+						sqlLabelTableName,
+						sqlLabelTableReleaseKeyColumn,
+						sqlLabelTableReleaseNamespaceColumn,
+						sqlLabelTableName,
+						sqlLabelTableName,
+					),
+				},
+				Down: []string{
+					fmt.Sprintf(`
+						DELETE TABLE %s;
+					`, sqlLabelTableName),
+				},
+			},
 		},
 	}
 
@@ -178,6 +218,13 @@ type SQLReleaseWrapper struct {
 	Owner      string `db:"owner"`
 	CreatedAt  int    `db:"createdAt"`
 	ModifiedAt int    `db:"modifiedAt"`
+}
+
+type SQLReleaseLabelWrapper struct {
+	ReleaseKey       string `db:"release_key"`
+	ReleaseNamespace string `db:"release_namespace"`
+	Key              string `db:"key"`
+	Value            string `db:"value"`
 }
 
 // NewSQL initializes a new sql driver.
@@ -230,13 +277,18 @@ func (s *SQL) Get(key string) (*rspb.Release, error) {
 		return nil, err
 	}
 
+	if release.Labels, err = s.getReleaseLabels(key, s.namespace); err != nil {
+		s.Log("failed to get release %s labels: %v", key, err)
+		return nil, err
+	}
+
 	return release, nil
 }
 
 // List returns the list of all releases such that filter(release) == true
 func (s *SQL) List(filter func(*rspb.Release) bool) ([]*rspb.Release, error) {
 	sb := s.statementBuilder.
-		Select(sqlReleaseTableBodyColumn).
+		Select(sqlReleaseTableKeyColumn, sqlReleaseTableBodyColumn).
 		From(sqlReleaseTableName).
 		Where(sq.Eq{sqlReleaseTableOwnerColumn: sqlReleaseDefaultOwner})
 
@@ -264,6 +316,12 @@ func (s *SQL) List(filter func(*rspb.Release) bool) ([]*rspb.Release, error) {
 			s.Log("list: failed to decode release: %v: %v", record, err)
 			continue
 		}
+
+		if release.Labels, err = s.getReleaseLabels(record.Key, release.Namespace); err != nil {
+			s.Log("failed to get release %s labels: %v", record.Key, err)
+			return nil, err
+		}
+
 		if filter(release) {
 			releases = append(releases, release)
 		}
@@ -275,7 +333,7 @@ func (s *SQL) List(filter func(*rspb.Release) bool) ([]*rspb.Release, error) {
 // Query returns the set of releases that match the provided set of labels.
 func (s *SQL) Query(labels map[string]string) ([]*rspb.Release, error) {
 	sb := s.statementBuilder.
-		Select(sqlReleaseTableBodyColumn).
+		Select(sqlReleaseTableKeyColumn, sqlReleaseTableBodyColumn).
 		From(sqlReleaseTableName)
 
 	keys := make([]string, 0, len(labels))
@@ -287,8 +345,8 @@ func (s *SQL) Query(labels map[string]string) ([]*rspb.Release, error) {
 		if _, ok := labelMap[key]; ok {
 			sb = sb.Where(sq.Eq{key: labels[key]})
 		} else {
-			s.Log("unknown label %s", key)
-			return nil, fmt.Errorf("unknow label %s", key)
+			s.Log("unknown Label %s", key)
+			return nil, fmt.Errorf("unknown label %s", key)
 		}
 	}
 
@@ -317,6 +375,12 @@ func (s *SQL) Query(labels map[string]string) ([]*rspb.Release, error) {
 			s.Log("list: failed to decode release: %v: %v", record, err)
 			continue
 		}
+
+		if release.Labels, err = s.getReleaseLabels(record.Key, release.Namespace); err != nil {
+			s.Log("failed to get release %s labels: %v", record.Key, err)
+			return nil, err
+		}
+
 		releases = append(releases, release)
 	}
 
@@ -399,6 +463,36 @@ func (s *SQL) Create(key string, rls *rspb.Release) error {
 		s.Log("failed to store release %s in SQL database: %v", key, err)
 		return err
 	}
+
+	for lk, lv := range rls.Labels {
+		insertLabelsQuery, args, err := s.statementBuilder.
+			Insert(sqlLabelTableName).
+			Columns(
+				sqlLabelTableReleaseKeyColumn,
+				sqlLabelTableReleaseNamespaceColumn,
+				sqlLabelTableKeyColumn,
+				sqlLabelTableValueColumn,
+			).
+			Values(
+				key,
+				namespace,
+				lk,
+				lv,
+			).ToSql()
+
+		if err != nil {
+			defer transaction.Rollback()
+			s.Log("failed to build insert query: %v", err)
+			return err
+		}
+
+		if _, err := transaction.Exec(insertLabelsQuery, args...); err != nil {
+			defer transaction.Rollback()
+			s.Log("failed to write Labels: %v", err)
+			return err
+		}
+	}
+
 	defer transaction.Commit()
 
 	return nil
@@ -475,6 +569,13 @@ func (s *SQL) Delete(key string) (*rspb.Release, error) {
 		transaction.Rollback()
 		return nil, err
 	}
+
+	if release.Labels, err = s.getReleaseLabels(key, s.namespace); err != nil {
+		s.Log("failed to get release %s labels: %v", key, err)
+		transaction.Rollback()
+		return nil, err
+	}
+
 	defer transaction.Commit()
 
 	deleteQuery, args, err := s.statementBuilder.
@@ -483,10 +584,50 @@ func (s *SQL) Delete(key string) (*rspb.Release, error) {
 		Where(sq.Eq{sqlReleaseTableNamespaceColumn: s.namespace}).
 		ToSql()
 	if err != nil {
-		s.Log("failed to build select query: %v", err)
+		s.Log("failed to build delete query: %v", err)
 		return nil, err
 	}
 
-	_, err = transaction.Exec(deleteQuery, args...)
+	if _, err = transaction.Exec(deleteQuery, args...); err != nil {
+		return release, err
+	}
+
+	deleteLabelsQuery, args, err := s.statementBuilder.
+		Delete(sqlLabelTableName).
+		Where(sq.Eq{sqlLabelTableReleaseKeyColumn: key}).
+		Where(sq.Eq{sqlLabelTableReleaseNamespaceColumn: s.namespace}).
+		ToSql()
+
+	if err != nil {
+		s.Log("failed to build delete Labels query: %v", err)
+		return nil, err
+	}
+
+	_, err = transaction.Exec(deleteLabelsQuery, args...)
 	return release, err
+}
+
+// Fetches release labels from database
+func (s *SQL) getReleaseLabels(key string, namespace string) (map[string]string, error) {
+	query, args, err := s.statementBuilder.
+		Select(sqlLabelTableKeyColumn, sqlLabelTableValueColumn).
+		From(sqlLabelTableName).
+		Where(sq.Eq{sqlLabelTableReleaseKeyColumn: key,
+			sqlLabelTableReleaseNamespaceColumn: s.namespace}).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var labelsList = []SQLReleaseLabelWrapper{}
+	if err := s.db.Select(&labelsList, query, args...); err != nil {
+		return nil, err
+	}
+
+	labelsMap := make(map[string]string)
+	for _, i := range labelsList {
+		labelsMap[i.Key] = i.Value
+	}
+
+	return filterSystemLabels(labelsMap), nil
 }

@@ -83,3 +83,28 @@ func decodeRelease(data string) (*rspb.Release, error) {
 	}
 	return &rls, nil
 }
+
+// Returns array of system labels' keys
+func systemLabelsKeys() []string {
+	return []string{"name", "owner", "status", "version", "createdAt", "modifiedAt"}
+}
+
+// Removes system labels
+func filterSystemLabels(lbs map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range lbs {
+		if !isSystemLabel(k) {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+func isSystemLabel(key string) bool {
+	for _, v := range systemLabelsKeys() {
+		if key == v {
+			return true
+		}
+	}
+	return false
+}

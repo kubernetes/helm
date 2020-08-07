@@ -72,6 +72,7 @@ func (secrets *Secrets) Get(key string) (*rspb.Release, error) {
 	}
 	// found the secret, decode the base64 data string
 	r, err := decodeRelease(string(obj.Data["release"]))
+	r.Labels = filterSystemLabels(obj.ObjectMeta.Labels)
 	return r, errors.Wrapf(err, "get: failed to decode data %q", key)
 }
 
@@ -97,6 +98,9 @@ func (secrets *Secrets) List(filter func(*rspb.Release) bool) ([]*rspb.Release, 
 			secrets.Log("list: failed to decode release: %v: %s", item, err)
 			continue
 		}
+
+		rls.Labels = filterSystemLabels(item.ObjectMeta.Labels)
+
 		if filter(rls) {
 			results = append(results, rls)
 		}
@@ -219,7 +223,10 @@ func newSecretsObject(key string, rls *rspb.Release, lbs labels) (*v1.Secret, er
 		lbs.init()
 	}
 
-	// apply labels
+	// apply user labels
+	lbs.mergeUserLabels(rls.Labels)
+
+	// apply internal labels
 	lbs.set("name", rls.Name)
 	lbs.set("owner", owner)
 	lbs.set("status", rls.Info.Status.String())
