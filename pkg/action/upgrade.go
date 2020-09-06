@@ -69,6 +69,9 @@ type Upgrade struct {
 	// DryRun controls whether the operation is prepared, but not executed.
 	// If `true`, the upgrade is prepared but not performed.
 	DryRun bool
+	// WithLineNumbers controls whether on error, the rendered yaml should include
+	// line numbers to assist with debugging
+	WithLineNumbers bool
 	// Force will, if set to `true`, ignore certain warnings and perform the upgrade anyway.
 	//
 	// This should be used with caution.
@@ -223,7 +226,7 @@ func (u *Upgrade) prepareUpgrade(name string, chart *chart.Chart, vals map[strin
 		return nil, nil, err
 	}
 
-	hooks, manifestDoc, notesTxt, err := u.cfg.renderResources(chart, valuesToRender, "", "", u.SubNotes, false, false, u.PostRenderer, u.DryRun)
+	hooks, manifestDoc, notesTxt, err := u.cfg.renderResources(chart, valuesToRender, "", "", u.SubNotes, false, false, u.PostRenderer, u.DryRun, u.WithLineNumbers)
 	if err != nil {
 		return nil, nil, err
 	}

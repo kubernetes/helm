@@ -23,6 +23,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -101,7 +102,7 @@ type Configuration struct {
 // TODO: This function is badly in need of a refactor.
 // TODO: As part of the refactor the duplicate code in cmd/helm/template.go should be removed
 //       This code has to do with writing files to disk.
-func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values, releaseName, outputDir string, subNotes, useReleaseName, includeCrds bool, pr postrender.PostRenderer, dryRun bool) ([]*release.Hook, *bytes.Buffer, string, error) {
+func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values, releaseName, outputDir string, subNotes, useReleaseName, includeCrds bool, pr postrender.PostRenderer, dryRun bool, withLineNumbers bool) ([]*release.Hook, *bytes.Buffer, string, error) {
 	hs := []*release.Hook{}
 	b := bytes.NewBuffer(nil)
 
@@ -172,6 +173,9 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 			if strings.TrimSpace(content) == "" {
 				continue
 			}
+			if withLineNumbers {
+				content = addLineNumbers(content)
+			}
 			fmt.Fprintf(b, "---\n# Source: %s\n%s\n", name, content)
 		}
 		return hs, b, "", err
@@ -222,6 +226,34 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 	}
 
 	return hs, b, notes, nil
+}
+
+// addLineNumbers numbers the lines of a resource
+func addLineNumbers(resource string) string {
+	lines := strings.Split(resource, "\n")
+	resultLines := []string{}
+	lineFormat := getNumberedLineFormat(len(lines))
+	for index, line := range lines {
+		lineNumber := index + 1
+		lineWithNum := fmt.Sprintf(lineFormat, lineNumber, line)
+		resultLines = append(resultLines, lineWithNum)
+	}
+
+	return strings.Join(resultLines, "\n")
+}
+
+// getNumberedLineFormat determines which format to use
+// when printing lines of a resource based on the
+// max possible number of digits
+func getNumberedLineFormat(maxLineNumber int) string {
+	strBuilder := strings.Builder{}
+	numDigits := len(strconv.Itoa(maxLineNumber))
+	// Format is like "%3d %s"
+	strBuilder.WriteString("%")
+	strBuilder.WriteString(strconv.Itoa(numDigits))
+	strBuilder.WriteString("d %s")
+
+	return strBuilder.String()
 }
 
 // RESTClientGetter gets the rest client
