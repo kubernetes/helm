@@ -17,12 +17,10 @@ package main
 
 import (
 	"io"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"helm.sh/helm/v3/cmd/helm/require"
-	"helm.sh/helm/v3/pkg/action"
 )
 
 const dependencyDesc = `
@@ -96,25 +94,5 @@ func newDependencyCmd(out io.Writer) *cobra.Command {
 	cmd.AddCommand(newDependencyUpdateCmd(out))
 	cmd.AddCommand(newDependencyBuildCmd(out))
 
-	return cmd
-}
-
-func newDependencyListCmd(out io.Writer) *cobra.Command {
-	client := action.NewDependency()
-
-	cmd := &cobra.Command{
-		Use:     "list CHART",
-		Aliases: []string{"ls"},
-		Short:   "list the dependencies for the given chart",
-		Long:    dependencyListDesc,
-		Args:    require.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			chartpath := "."
-			if len(args) > 0 {
-				chartpath = filepath.Clean(args[0])
-			}
-			return client.List(chartpath, out)
-		},
-	}
 	return cmd
 }
