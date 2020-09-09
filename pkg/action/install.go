@@ -71,12 +71,9 @@ type Install struct {
 
 	ChartPathOptions
 
-	ClientOnly      bool
-	CreateNamespace bool
-	DryRun          bool
-	// WithLineNumbers controls whether on error, the rendered yaml should include
-	// line numbers to assist with debugging
-	WithLineNumbers          bool
+	ClientOnly               bool
+	CreateNamespace          bool
+	DryRun                   bool
 	DisableHooks             bool
 	Replace                  bool
 	Wait                     bool
@@ -239,7 +236,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	rel := i.createRelease(chrt, vals)
 
 	var manifestDoc *bytes.Buffer
-	rel.Hooks, manifestDoc, rel.Info.Notes, err = i.cfg.renderResources(chrt, valuesToRender, i.ReleaseName, i.OutputDir, i.SubNotes, i.UseReleaseName, i.IncludeCRDs, i.PostRenderer, i.DryRun, i.WithLineNumbers)
+	rel.Hooks, manifestDoc, rel.Info.Notes, err = i.cfg.renderResources(chrt, valuesToRender, i.ReleaseName, i.OutputDir, i.SubNotes, i.UseReleaseName, i.IncludeCRDs, i.PostRenderer, i.DryRun)
 	// Even for errors, attach this if available
 	if manifestDoc != nil {
 		rel.Manifest = manifestDoc.String()

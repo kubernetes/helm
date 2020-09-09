@@ -282,7 +282,6 @@ func TestInstallRelease_LineNumbers(t *testing.T) {
 	t.Run("Should print line numbers on incorrect yaml when flag is set", func(t *testing.T) {
 		instAction := installAction(t)
 		instAction.DryRun = true
-		instAction.WithLineNumbers = true
 		dummyVals := map[string]interface{}{}
 		badChart := buildChart(withBadYaml())
 		res, _ := instAction.Run(badChart, dummyVals)
@@ -294,29 +293,15 @@ func TestInstallRelease_LineNumbers(t *testing.T) {
 		is.Contains(res.Manifest, "1 kind: ConfigMap")
 	})
 
-	t.Run("Should not print line numbers on well-formatted yaml when flag is set", func(t *testing.T) {
+	t.Run("Should not print line numbers on well-formatted yaml", func(t *testing.T) {
 		instAction := installAction(t)
 		instAction.DryRun = true
-		instAction.WithLineNumbers = true
 		dummyVals := map[string]interface{}{}
 		goodChart := buildChart(withSampleTemplates())
 		res, _ := instAction.Run(goodChart, dummyVals)
 
 		is.Contains(res.Manifest, "hello: world")
 		is.NotContains(res.Manifest, "1 hello: Earth")
-	})
-
-	t.Run("Should not print line numbers on incorrect yaml when flag is unset", func(t *testing.T) {
-		instAction := installAction(t)
-		instAction.DryRun = true
-		instAction.WithLineNumbers = false
-		dummyVals := map[string]interface{}{}
-		badChart := buildChart(withBadYaml())
-		res, _ := instAction.Run(badChart, dummyVals)
-
-		is.Contains(res.Manifest, "this:isn't:")
-		is.NotContains(res.Manifest, "2 how:you_write_yaml")
-		is.NotContains(res.Manifest, "1 kind: ConfigMap")
 	})
 }
 

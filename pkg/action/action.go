@@ -17,6 +17,7 @@ limitations under the License.
 package action
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -102,7 +103,7 @@ type Configuration struct {
 // TODO: This function is badly in need of a refactor.
 // TODO: As part of the refactor the duplicate code in cmd/helm/template.go should be removed
 //       This code has to do with writing files to disk.
-func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values, releaseName, outputDir string, subNotes, useReleaseName, includeCrds bool, pr postrender.PostRenderer, dryRun bool, withLineNumbers bool) ([]*release.Hook, *bytes.Buffer, string, error) {
+func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values, releaseName, outputDir string, subNotes, useReleaseName, includeCrds bool, pr postrender.PostRenderer, dryRun bool) ([]*release.Hook, *bytes.Buffer, string, error) {
 	hs := []*release.Hook{}
 	b := bytes.NewBuffer(nil)
 
@@ -173,9 +174,7 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 			if strings.TrimSpace(content) == "" {
 				continue
 			}
-			if withLineNumbers {
-				content = addLineNumbers(content)
-			}
+			content = addLineNumbers(content)
 			fmt.Fprintf(b, "---\n# Source: %s\n%s\n", name, content)
 		}
 		return hs, b, "", err
@@ -228,18 +227,30 @@ func (c *Configuration) renderResources(ch *chart.Chart, values chartutil.Values
 	return hs, b, notes, nil
 }
 
-// addLineNumbers numbers the lines of a resource
-func addLineNumbers(resource string) string {
-	lines := strings.Split(resource, "\n")
-	resultLines := []string{}
-	lineFormat := getNumberedLineFormat(len(lines))
-	for index, line := range lines {
-		lineNumber := index + 1
-		lineWithNum := fmt.Sprintf(lineFormat, lineNumber, line)
-		resultLines = append(resultLines, lineWithNum)
+// getResourceLines separates a resource into individual lines
+func getResourceLines(resource string) []string {
+	result := []string{}
+	in := strings.NewReader(resource)
+	scanner := bufio.NewScanner(in)
+	for scanner.Scan() {
+		result = append(result, scanner.Text())
 	}
 
-	return strings.Join(resultLines, "\n")
+	return result
+}
+
+// addLineNumbers numbers the lines of a resource
+func addLineNumbers(resource string) string {
+	resourceLines := getResourceLines(resource)
+	lineFormat := getNumberedLineFormat(len(resourceLines))
+	var result bytes.Buffer
+
+	for index, line := range resourceLines {
+		lineNumber := index + 1
+		lineWithNum := fmt.Sprintf(lineFormat, lineNumber, line)
+		fmt.Fprintln(&result, lineWithNum)
+	}
+	return result.String()
 }
 
 // getNumberedLineFormat determines which format to use
@@ -252,7 +263,6 @@ func getNumberedLineFormat(maxLineNumber int) string {
 	strBuilder.WriteString("%")
 	strBuilder.WriteString(strconv.Itoa(numDigits))
 	strBuilder.WriteString("d %s")
-
 	return strBuilder.String()
 }
 
