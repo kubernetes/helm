@@ -235,6 +235,7 @@ func TestUpdateBeforeBuild(t *testing.T) {
 		Getters:          g,
 		RepositoryConfig: dir("repositories.yaml"),
 		RepositoryCache:  dir(),
+		ChartCache:       dir(),
 	}
 
 	// Update before Build. see issue: https://github.com/helm/helm/issues/7101
@@ -375,6 +376,7 @@ func checkBuildWithOptionalFields(t *testing.T, chartName string, dep chart.Depe
 		Getters:          g,
 		RepositoryConfig: dir("repositories.yaml"),
 		RepositoryCache:  dir(),
+		ChartCache:       dir(),
 	}
 
 	// First build will update dependencies and create Chart.lock file.

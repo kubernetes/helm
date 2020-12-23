@@ -655,6 +655,7 @@ func (c *ChartPathOptions) LocateChart(name string, settings *cli.EnvSettings) (
 		},
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
+		ChartCache:       settings.ChartCache,
 	}
 	if c.Verify {
 		dl.Verify = downloader.VerifyAlways
@@ -668,11 +669,7 @@ func (c *ChartPathOptions) LocateChart(name string, settings *cli.EnvSettings) (
 		name = chartURL
 	}
 
-	if err := os.MkdirAll(settings.RepositoryCache, 0755); err != nil {
-		return "", err
-	}
-
-	filename, _, err := dl.DownloadTo(name, version, settings.RepositoryCache)
+	filename, _, err := dl.Fetch(name, version)
 	if err == nil {
 		lname, err := filepath.Abs(filename)
 		if err != nil {
