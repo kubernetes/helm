@@ -340,7 +340,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 			return i.failRelease(rel, err)
 		}
 	} else if len(resources) > 0 {
-		if _, err := i.cfg.KubeClient.Update(toBeAdopted, resources, false); err != nil {
+		if _, err := i.cfg.KubeClient.Update(toBeAdopted, resources, false, i.Timeout); err != nil {
 			return i.failRelease(rel, err)
 		}
 	}
