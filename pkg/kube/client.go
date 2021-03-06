@@ -17,10 +17,12 @@ limitations under the License.
 package kube // import "helm.sh/helm/v3/pkg/kube"
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +38,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -45,8 +49,10 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	cachetools "k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+	"k8s.io/kubectl/pkg/cmd/get"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
@@ -126,6 +132,152 @@ func (c *Client) Create(resources ResourceList) (*Result, error) {
 	return &Result{Created: resources}, nil
 }
 
+func transformRequests(req *rest.Request) {
+	tableParam := strings.Join([]string{
+		fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1.SchemeGroupVersion.Version, metav1.GroupName),
+		fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1beta1.SchemeGroupVersion.Version, metav1beta1.GroupName),
+		"application/json",
+	}, ",")
+	req.SetHeader("Accept", tableParam)
+
+	// if sorting, ensure we receive the full object in order to introspect its fields via jsonpath
+	req.Param("includeObject", "Object")
+}
+
+func sortTableSlice(objs []runtime.Object) []runtime.Object {
+	if len(objs) < 2 {
+		return objs
+	}
+
+	ntbl := &metav1.Table{}
+	// Sort the list of objects
+	var newObjs []runtime.Object
+	namesCache := make(map[string]runtime.Object, len(objs))
+	var names []string
+	for _, obj := range objs {
+		unstr, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return objs
+		}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstr.Object, ntbl); err != nil {
+			return objs
+		}
+		namesCache[ntbl.GetSelfLink()] = obj
+		names = append(names, ntbl.GetSelfLink())
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		newObjs = append(newObjs, namesCache[name])
+	}
+	return newObjs
+}
+
+func (c *Client) Get(resources ResourceList, reader io.Reader) (string, error) {
+	buf := new(bytes.Buffer)
+	printFlags := get.NewHumanPrintFlags()
+	typePrinter, _ := printFlags.ToPrinter("")
+	printer := &get.TablePrinter{Delegate: typePrinter}
+	objs := make(map[string][]runtime.Object)
+	err := resources.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			return err
+		}
+		gvk := info.ResourceMapping().GroupVersionKind
+		vk := gvk.Version + "/" + gvk.Kind
+		obj, err := getResource(info)
+		info.Object = obj
+		if err != nil {
+			return err
+		}
+		objs[vk] = append(objs[vk], obj)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	infos, err := c.Build(reader, false)
+	if err != nil {
+		return "", err
+	}
+	for _, info := range infos {
+		objs, err = c.getSelectRelationPod(info, objs)
+		if err != nil {
+			c.Log("Warning: get the relation pod is failed, err:%s", err.Error())
+		}
+	}
+	var keys []string
+	for key := range objs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, t := range keys {
+		if _, err = fmt.Fprintf(buf, "==> %s\n", t); err != nil {
+			return "", err
+		}
+		vk := objs[t]
+		vk = sortTableSlice(vk)
+		for _, resource := range vk {
+			if err := printer.PrintObj(resource, buf); err != nil {
+				c.Log("failed to print object type %s: %v", t, err)
+				return "", err
+			}
+		}
+		if _, err := buf.WriteString("\n"); err != nil {
+			return "", err
+		}
+	}
+	return buf.String(), nil
+}
+
+func (c *Client) getSelectRelationPod(info *resource.Info, objs map[string][]runtime.Object) (map[string][]runtime.Object, error) {
+	if info == nil {
+		return objs, nil
+	}
+	c.Log("get relation pod of object: %s/%s/%s", info.Namespace, info.Mapping.GroupVersionKind.Kind, info.Name)
+	selector, ok, _ := getSelectorFromObject(info.Object)
+	if !ok {
+		return objs, nil
+	}
+	infos, err := c.Factory.NewBuilder().
+		Unstructured().
+		ContinueOnError().
+		NamespaceParam(info.Namespace).
+		DefaultNamespace().
+		ResourceTypes("pods").
+		LabelSelector(labels.Set(selector).AsSelector().String()).
+		TransformRequests(transformRequests).
+		Do().Infos()
+	if err != nil {
+		return objs, err
+	}
+	for _, info := range infos {
+		vk := "v1/Pod(related)"
+		objs[vk] = append(objs[vk], info.Object)
+	}
+	return objs, nil
+}
+
+func getSelectorFromObject(obj runtime.Object) (map[string]string, bool, error) {
+	typed := obj.(*unstructured.Unstructured)
+	kind := typed.Object["kind"]
+	switch kind {
+	case "ReplicaSet", "Deployment", "StatefulSet", "DaemonSet", "Job":
+		return unstructured.NestedStringMap(typed.Object, "spec", "selector", "matchLabels")
+	case "ReplicationController":
+		return unstructured.NestedStringMap(typed.Object, "spec", "selector")
+	default:
+		return nil, false, nil
+	}
+}
+
+func getResource(info *resource.Info) (runtime.Object, error) {
+	obj, err := resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name)
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
 // Wait up to the given timeout for the specified resources to be ready
 func (c *Client) Wait(resources ResourceList, timeout time.Duration) error {
 	cs, err := c.getKubeClient()
@@ -179,11 +331,21 @@ func (c *Client) Build(reader io.Reader, validate bool) (ResourceList, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := c.newBuilder().
-		Unstructured().
-		Schema(schema).
-		Stream(reader, "").
-		Do().Infos()
+	var result ResourceList
+	if validate {
+		result, err = c.newBuilder().
+			Unstructured().
+			Schema(schema).
+			Stream(reader, "").
+			Do().Infos()
+	} else {
+		result, err = c.newBuilder().
+			Unstructured().
+			Schema(schema).
+			Stream(reader, "").
+			TransformRequests(transformRequests).
+			Do().Infos()
+	}
 	return result, scrubValidationError(err)
 }
 

@@ -120,10 +120,12 @@ func (s statusPrinter) WriteTable(out io.Writer) error {
 	fmt.Fprintf(out, "NAMESPACE: %s\n", s.release.Namespace)
 	fmt.Fprintf(out, "STATUS: %s\n", s.release.Info.Status.String())
 	fmt.Fprintf(out, "REVISION: %d\n", s.release.Version)
+	if len(s.release.Info.Resources) > 0 {
+		fmt.Fprintf(out, "RESOURCES:\n%s\n", s.release.Info.Resources)
+	}
 	if s.showDescription {
 		fmt.Fprintf(out, "DESCRIPTION: %s\n", s.release.Info.Description)
 	}
-
 	executions := executionsByHookEvent(s.release)
 	if tests, ok := executions[release.HookTest]; !ok || len(tests) == 0 {
 		fmt.Fprintln(out, "TEST SUITE: None")
