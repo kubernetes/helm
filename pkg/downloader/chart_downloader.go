@@ -96,13 +96,20 @@ func (c *ChartDownloader) DownloadTo(ref, version, dest string) (string, *proven
 		return "", nil, err
 	}
 
-	data, err := g.Get(u.String(), c.Options...)
+	downloadURL := ""
+	if u.Scheme == "git" {
+		downloadURL = u.Host + u.Path
+	} else {
+		downloadURL = u.String()
+	}
+
+	data, err := g.Get(downloadURL, c.Options...)
 	if err != nil {
 		return "", nil, err
 	}
 
 	name := filepath.Base(u.Path)
-	if u.Scheme == "oci" {
+	if u.Scheme == "oci" || u.Scheme == "git" {
 		name = fmt.Sprintf("%s-%s.tgz", name, version)
 	}
 
@@ -154,6 +161,19 @@ func (c *ChartDownloader) DownloadTo(ref, version, dest string) (string, *proven
 //		* If version is empty, this will return the URL for the latest version
 //		* If no version can be found, an error is returned
 func (c *ChartDownloader) ResolveChartVersion(ref, version string) (*url.URL, error) {
+	if strings.HasPrefix(ref, "git:") {
+		gitRefSplitResult := strings.Split(ref, "git:")
+		gitURL := gitRefSplitResult[1]
+		u, err := url.Parse(gitURL)
+		if err != nil {
+			return nil, errors.Errorf("invalid git URL format: %s", gitURL)
+		}
+		return &url.URL{
+			Scheme: "git",
+			Host:   u.Scheme + "://" + u.Host,
+			Path:   u.Path,
+		}, nil
+	}
 	u, err := url.Parse(ref)
 	if err != nil {
 		return nil, errors.Errorf("invalid chart URL format: %s", ref)

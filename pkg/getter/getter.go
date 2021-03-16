@@ -41,6 +41,7 @@ type options struct {
 	passCredentialsAll    bool
 	userAgent             string
 	version               string
+	chartName             string
 	registryClient        *registry.Client
 	timeout               time.Duration
 }
@@ -62,6 +63,11 @@ func WithBasicAuth(username, password string) Option {
 	return func(opts *options) {
 		opts.username = username
 		opts.password = password
+	}
+}
+func WithChartName(chartName string) Option {
+	return func(opts *options) {
+		opts.chartName = chartName
 	}
 }
 
@@ -173,11 +179,16 @@ var ociProvider = Provider{
 	New:     NewOCIGetter,
 }
 
+var gitProvider = Provider{
+	Schemes: []string{"git"},
+	New:     NewGITGetter,
+}
+
 // All finds all of the registered getters as a list of Provider instances.
 // Currently, the built-in getters and the discovered plugins with downloader
 // notations are collected.
 func All(settings *cli.EnvSettings) Providers {
-	result := Providers{httpProvider, ociProvider}
+	result := Providers{httpProvider, ociProvider, gitProvider}
 	pluginDownloaders, _ := collectPlugins(settings)
 	result = append(result, pluginDownloaders...)
 	return result
