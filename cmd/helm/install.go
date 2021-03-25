@@ -215,17 +215,18 @@ func runInstall(args []string, client *action.Install, valueOpts *values.Options
 		// https://github.com/helm/helm/issues/2209
 		if err := action.CheckDependencies(chartRequested, req); err != nil {
 			if client.DependencyUpdate {
-				man := &downloader.Manager{
-					Out:              out,
-					ChartPath:        cp,
-					Keyring:          client.ChartPathOptions.Keyring,
-					SkipUpdate:       false,
-					Getters:          p,
-					RegistryClient:   client.RegistryClient,
-					RepositoryConfig: settings.RepositoryConfig,
-					RepositoryCache:  settings.RepositoryCache,
-					Debug:            settings.Debug,
-				}
+				man := downloader.NewManager(
+					out,
+					cp,
+					downloader.VerifyNever,
+					settings.Debug,
+					client.ChartPathOptions.Keyring,
+					false,
+					p,
+					client.RegistryClient,
+					settings.RepositoryConfig,
+					settings.RepositoryCache,
+				)
 				if err := man.Update(); err != nil {
 					return nil, err
 				}
