@@ -91,9 +91,9 @@ func newPackageCmd(out io.Writer) *cobra.Command {
 						ChartPath:        path,
 						Keyring:          client.Keyring,
 						Getters:          p,
-						Debug:            settings.Debug,
 						RepositoryConfig: settings.RepositoryConfig,
 						RepositoryCache:  settings.RepositoryCache,
+						Debug:            settings.Debug,
 					}
 
 					if err := downloadManager.Update(); err != nil {
