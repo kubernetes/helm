@@ -38,7 +38,7 @@ You can optionally specify a list of repositories you want to update.
 To update all the repositories, use 'helm repo update'.
 `
 
-var errNoRepositories = errors.New("no repositories found. You must add one before updating")
+var errNoRepositoriesToUpdate = errors.New("no repositories found. You must add one before updating")
 
 type repoUpdateOptions struct {
 	update    func([]*repo.ChartRepository, io.Writer)
@@ -73,11 +73,11 @@ func (o *repoUpdateOptions) run(out io.Writer) error {
 	f, err := repo.LoadFile(o.repoFile)
 	switch {
 	case isNotExist(err):
-		return errNoRepositories
+		return errNoRepositoriesToUpdate
 	case err != nil:
 		return errors.Wrapf(err, "failed loading file: %s", o.repoFile)
 	case len(f.Repositories) == 0:
-		return errNoRepositories
+		return errNoRepositoriesToUpdate
 	}
 
 	var repos []*repo.ChartRepository

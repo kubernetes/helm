@@ -34,8 +34,8 @@ It can be used to add, remove, list, and index chart repositories.
 
 func newRepoCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "repo add|remove|list|index|update [ARGS]",
-		Short: "add, list, remove, update, and index chart repositories",
+		Use:   "repo add|remove|list|index|update|validate [ARGS]",
+		Short: "add, list, remove, update, validate, and index chart repositories",
 		Long:  repoHelm,
 		Args:  require.NoArgs,
 	}
@@ -45,6 +45,7 @@ func newRepoCmd(out io.Writer) *cobra.Command {
 	cmd.AddCommand(newRepoRemoveCmd(out))
 	cmd.AddCommand(newRepoIndexCmd(out))
 	cmd.AddCommand(newRepoUpdateCmd(out))
+	cmd.AddCommand(newRepoValidateCmd(out))
 
 	return cmd
 }
