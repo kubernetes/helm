@@ -113,18 +113,6 @@ func LoadIndexFile(path string) (*IndexFile, error) {
 	return i, nil
 }
 
-func ValidateIndexFile(path string) (*IndexFile, error) {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	i, err := loadIndex(b, path, false)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error loading %s", path)
-	}
-	return i, nil
-}
-
 // MustAdd adds a file to the index
 // This can leave the index in an unsorted state
 func (i IndexFile) MustAdd(md *chart.Metadata, filename, baseURL, digest string) error {
