@@ -346,7 +346,7 @@ func loadIndex(data []byte, source string, consolidateWarnings bool) (*IndexFile
 		}
 	}
 	if invalidCharts > 0 && consolidateWarnings {
-		log.Printf("skipped loading %d invalid chart entries from %s\nrun 'helm repo validate' for full list of invalid entries", invalidCharts, source)
+		log.Printf("skipped loading %d invalid chart entries from %s\nrun 'helm repo update --show-all-warnings' for full list of invalid entries", invalidCharts, source)
 	}
 	i.SortEntries()
 	if i.APIVersion == "" {

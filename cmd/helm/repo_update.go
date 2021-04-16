@@ -38,13 +38,14 @@ You can optionally specify a list of repositories you want to update.
 To update all the repositories, use 'helm repo update'.
 `
 
-var errNoRepositoriesToUpdate = errors.New("no repositories found. You must add one before updating")
+var errNoRepositories = errors.New("no repositories found. You must add one before updating")
 
 type repoUpdateOptions struct {
-	update    func([]*repo.ChartRepository, io.Writer)
-	repoFile  string
-	repoCache string
-	names     []string
+	showAllWarnings bool
+	update          func([]*repo.ChartRepository, io.Writer, bool)
+	repoFile        string
+	repoCache       string
+	names           []string
 }
 
 func newRepoUpdateCmd(out io.Writer) *cobra.Command {
@@ -63,21 +64,25 @@ func newRepoUpdateCmd(out io.Writer) *cobra.Command {
 			o.repoFile = settings.RepositoryConfig
 			o.repoCache = settings.RepositoryCache
 			o.names = args
-			return o.run(out)
+			return o.run(out, args)
 		},
 	}
+
+	f := cmd.Flags()
+	f.BoolVar(&o.showAllWarnings, "show-all-warnings", false, "show every invalid chart while indexing repository")
+
 	return cmd
 }
 
-func (o *repoUpdateOptions) run(out io.Writer) error {
+func (o *repoUpdateOptions) run(out io.Writer, args []string) error {
 	f, err := repo.LoadFile(o.repoFile)
 	switch {
 	case isNotExist(err):
-		return errNoRepositoriesToUpdate
+		return errNoRepositories
 	case err != nil:
 		return errors.Wrapf(err, "failed loading file: %s", o.repoFile)
 	case len(f.Repositories) == 0:
-		return errNoRepositoriesToUpdate
+		return errNoRepositories
 	}
 
 	var repos []*repo.ChartRepository
@@ -103,18 +108,24 @@ func (o *repoUpdateOptions) run(out io.Writer) error {
 		}
 	}
 
-	o.update(repos, out)
+	o.update(repos, out, o.showAllWarnings)
 	return nil
 }
 
-func updateCharts(repos []*repo.ChartRepository, out io.Writer) {
+func updateCharts(repos []*repo.ChartRepository, out io.Writer, showAllWarnings bool) {
 	fmt.Fprintln(out, "Hang tight while we grab the latest from your chart repositories...")
 	var wg sync.WaitGroup
 	for _, re := range repos {
 		wg.Add(1)
 		go func(re *repo.ChartRepository) {
 			defer wg.Done()
-			if _, err := re.DownloadIndexFile(); err != nil {
+			var err error
+			if showAllWarnings {
+				_, err = re.ValidateAndDownloadIndexFile()
+			} else {
+				_, err = re.DownloadIndexFile()
+			}
+			if err != nil {
 				fmt.Fprintf(out, "...Unable to get an update from the %q chart repository (%s):\n\t%s\n", re.Config.Name, re.Config.URL, err)
 			} else {
 				fmt.Fprintf(out, "...Successfully got an update from the %q chart repository\n", re.Config.Name)
