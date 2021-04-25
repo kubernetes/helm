@@ -77,8 +77,8 @@ A repository can be defined as a git URL. The path must start with a prefix of
 
     # Chart.yaml
     dependencies:
-    - name: nginx
-      version: "master"
+    - name: helm-chart
+      version: "main"
       repository: "git:https://github.com/helm/helm-chart.git"
 
 The 'repository' can be the https or ssh URL that you would use to clone a git

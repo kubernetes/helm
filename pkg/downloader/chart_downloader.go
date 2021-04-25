@@ -110,7 +110,7 @@ func (c *ChartDownloader) DownloadTo(ref, version, dest string) (string, *proven
 
 	name := filepath.Base(u.Path)
 	if u.Scheme == "oci" || u.Scheme == "git" {
-		name = fmt.Sprintf("%s-%s.tgz", name, version)
+		name = fmt.Sprintf("%s-%s.tgz", strings.TrimSuffix(name, ".git"), version)
 	}
 
 	destfile := filepath.Join(dest, name)

@@ -713,7 +713,7 @@ func (m *Manager) parallelRepoUpdate(repos []*repo.Entry) error {
 // If it finds a URL that is "relative", it will prepend the repoURL.
 func (m *Manager) findChartURL(name, version, repoURL string, repos map[string]*repo.ChartRepository) (url, username, password string, insecureskiptlsverify, passcredentialsall bool, caFile, certFile, keyFile string, err error) {
 	if strings.HasPrefix(repoURL, "git:") {
-		return repoURL, "", "", nil
+		return repoURL, "", "", false, nil
 	}
 
 	if strings.HasPrefix(repoURL, "oci://") {

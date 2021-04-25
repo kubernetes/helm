@@ -84,7 +84,7 @@ func (g *GITGetter) get(href string) (*bytes.Buffer, error) {
 	// A .helmignore that includes an ignore for .git/ should be included in the git repo itself,
 	// but a lot of people will probably not think about that.
 	// To prevent the git history from bleeding into the charts archive, append/create .helmignore.
-	g.ensureGitDirIgnored(tmpDir)
+	g.ensureGitDirIgnored(chartTmpDir)
 
 	buf, err := fileutil.CompressDirToTgz(chartTmpDir, tmpDir)
 	if err != nil {
