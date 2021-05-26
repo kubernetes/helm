@@ -45,7 +45,7 @@ func NewDependency() *Dependency {
 }
 
 // List executes 'helm dependency list'.
-func (d *Dependency) List(chartpath string, out io.Writer) error {
+func (d *Dependency) List(chartpath string, out io.Writer, transitive bool) error {
 	c, err := loader.Load(chartpath)
 	if err != nil {
 		return err
@@ -56,7 +56,17 @@ func (d *Dependency) List(chartpath string, out io.Writer) error {
 		return nil
 	}
 
-	d.printDependencies(chartpath, out, c)
+	table := uitable.New()
+	table.MaxColWidth = 80
+	table.AddRow("NAME", "VERSION", "REPOSITORY", "STATUS")
+
+	d.printDependencies(table, chartpath, c)
+
+	if transitive {
+		d.printTransitiveDependencies(table, c)
+	}
+
+	fmt.Fprintln(out, table)
 	fmt.Fprintln(out)
 	d.printMissing(chartpath, out, c.Metadata.Dependencies)
 	return nil
@@ -179,14 +189,23 @@ func statArchiveForStatus(archive string, dep *chart.Dependency) string {
 }
 
 // printDependencies prints all of the dependencies in the yaml file.
-func (d *Dependency) printDependencies(chartpath string, out io.Writer, c *chart.Chart) {
-	table := uitable.New()
-	table.MaxColWidth = 80
-	table.AddRow("NAME", "VERSION", "REPOSITORY", "STATUS")
+func (d *Dependency) printDependencies(table *uitable.Table, chartpath string, c *chart.Chart) {
 	for _, row := range c.Metadata.Dependencies {
 		table.AddRow(row.Name, row.Version, row.Repository, d.dependencyStatus(chartpath, row, c))
 	}
-	fmt.Fprintln(out, table)
+}
+
+// printTransitiveDependencies prints all the transitive dependencies in a given chart.
+func (d *Dependency) printTransitiveDependencies(table *uitable.Table, c *chart.Chart) {
+	for _, sc := range c.Dependencies() {
+		if sc.Lock != nil {
+			for _, td := range sc.Lock.Dependencies {
+				table.AddRow(td.Name, td.Version, td.Repository, "transitive")
+			}
+		}
+
+		d.printTransitiveDependencies(table, sc)
+	}
 }
 
 // printMissing prints warnings about charts that are present on disk, but are
