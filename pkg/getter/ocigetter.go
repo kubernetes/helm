@@ -49,6 +49,26 @@ func (g *OCIGetter) get(href string) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
+	if client == nil {
+		opts := []registry.ClientOption{}
+
+		if g.opts.caFile != "" {
+			opts = append(opts, registry.ClientOptCAFile(g.opts.caFile))
+		}
+
+		if g.opts.certFile != "" && g.opts.keyFile != "" {
+			opts = append(opts, registry.ClientOptCertKeyFiles(g.opts.certFile, g.opts.keyFile))
+		}
+
+		if g.opts.insecureSkipVerifyTLS {
+			opts = append(opts, registry.ClientOptInsecureSkipVerifyTLS(g.opts.insecureSkipVerifyTLS))
+		}
+		client, err = registry.NewClient(opts...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	buf, err := client.PullChart(r)
 	if err != nil {
 		return nil, err
@@ -59,16 +79,7 @@ func (g *OCIGetter) get(href string) (*bytes.Buffer, error) {
 
 // NewOCIGetter constructs a valid http/https client as a Getter
 func NewOCIGetter(ops ...Option) (Getter, error) {
-	registryClient, err := registry.NewClient()
-	if err != nil {
-		return nil, err
-	}
-
-	client := OCIGetter{
-		opts: options{
-			registryClient: registryClient,
-		},
-	}
+	client := OCIGetter{}
 
 	for _, opt := range ops {
 		opt(&client.opts)

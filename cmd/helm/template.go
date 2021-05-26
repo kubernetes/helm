@@ -64,6 +64,9 @@ func newTemplateCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return compInstall(args, toComplete, client)
 		},
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return preRunEWithChartPathOptions(cmd, args, &client.ChartPathOptions)
+		},
 		RunE: func(_ *cobra.Command, args []string) error {
 			if kubeVersion != "" {
 				parsedKubeVersion, err := chartutil.ParseKubeVersion(kubeVersion)

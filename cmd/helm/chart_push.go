@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"helm.sh/helm/v3/cmd/helm/require"
+	"helm.sh/helm/v3/internal/experimental/registry"
 	"helm.sh/helm/v3/pkg/action"
 )
 
@@ -34,7 +35,7 @@ Must first run "helm chart save" or "helm chart pull".
 `
 
 func newChartPushCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:    "push [ref]",
 		Short:  "push a chart to remote",
 		Long:   chartPushDesc,
@@ -45,4 +46,9 @@ func newChartPushCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 			return action.NewChartPush(cfg).Run(out, ref)
 		},
 	}
+
+	f := cmd.Flags()
+	registry.AddRegistryCmdFlags(f)
+
+	return cmd
 }

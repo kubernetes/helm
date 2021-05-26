@@ -19,18 +19,22 @@ package registry // import "helm.sh/helm/v3/internal/experimental/registry"
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"sort"
 
+	"github.com/containerd/containerd/remotes"
 	auth "github.com/deislabs/oras/pkg/auth/docker"
 	"github.com/deislabs/oras/pkg/content"
 	"github.com/deislabs/oras/pkg/oras"
 	"github.com/gosuri/uitable"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/helmpath"
@@ -40,6 +44,24 @@ const (
 	// CredentialsFileBasename is the filename for auth credentials file
 	CredentialsFileBasename = "config.json"
 )
+
+// DefaultClient defines the default registry client
+var DefaultClient *Client
+
+// InsecureOpt defines access registry witout TLS verification
+var InsecureOpt bool
+
+// PlainHTTPOpt indicates access registry in plain HTTP
+var PlainHTTPOpt bool
+
+// CAFileOpt defines the CA cert file for registry access
+var CAFileOpt string
+
+// CertFileOpt defines the client cert file for registry access
+var CertFileOpt string
+
+// KeyFile defines the client key file for registry access
+var KeyFile string
 
 type (
 	// Client works with OCI-compliant registries and local Helm chart cache
@@ -51,8 +73,23 @@ type (
 		authorizer      *Authorizer
 		resolver        *Resolver
 		cache           *Cache
+
+		// registry setting
+		certFile              string
+		keyFile               string
+		caFile                string
+		insecureSkipVerifyTLS bool
+		plainHTTP             bool
 	}
 )
+
+func AddRegistryCmdFlags(f *pflag.FlagSet) {
+	f.BoolVarP(&InsecureOpt, "insecure-skip-tls-verify", "", false, "skip registry tls certificate checks")
+	f.BoolVarP(&PlainHTTPOpt, "plain-http", "", false, "use plain http to connect to the registry instead of https")
+	f.StringVar(&CertFileOpt, "cert-file", "", "identify HTTPS client using this SSL certificate file")
+	f.StringVar(&KeyFile, "key-file", "", "identify HTTPS client using this SSL key file")
+	f.StringVar(&CAFileOpt, "ca-file", "", "verify certificates of HTTPS-enabled registry using this CA bundle")
+}
 
 // NewClient returns a new registry client with config
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -76,7 +113,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		}
 	}
 	if client.resolver == nil {
-		resolver, err := client.authorizer.Resolver(context.Background(), http.DefaultClient, false)
+		resolver, err := client.newResolver()
 		if err != nil {
 			return nil, err
 		}
@@ -333,4 +370,42 @@ func (c *Client) getChartTableRows() ([][]interface{}, error) {
 		}
 	}
 	return rows, nil
+}
+
+func (c *Client) newResolver() (resolver remotes.Resolver, err error) {
+	config := &tls.Config{}
+
+	if c.caFile != "" {
+		caCert, err := ioutil.ReadFile(c.caFile)
+		if err != nil {
+			return nil, err
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		config.RootCAs = caCertPool
+	}
+
+	if c.certFile != "" && c.keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		config.Certificates = []tls.Certificate{cert}
+	}
+
+	if c.insecureSkipVerifyTLS {
+		config.InsecureSkipVerify = true
+	}
+
+	return c.authorizer.Resolver(
+		context.Background(),
+		&http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: config,
+			},
+		},
+		c.plainHTTP,
+	)
 }

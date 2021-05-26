@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"helm.sh/helm/v3/cmd/helm/require"
+	"helm.sh/helm/v3/internal/experimental/registry"
 	"helm.sh/helm/v3/pkg/action"
 )
 
@@ -32,7 +33,7 @@ This will store the chart in the local registry cache to be used later.
 `
 
 func newChartPullCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:    "pull [ref]",
 		Short:  "pull a chart from remote",
 		Long:   chartPullDesc,
@@ -43,4 +44,9 @@ func newChartPullCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 			return action.NewChartPull(cfg).Run(out, ref)
 		},
 	}
+
+	f := cmd.Flags()
+	registry.AddRegistryCmdFlags(f)
+
+	return cmd
 }
