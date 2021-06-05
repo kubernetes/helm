@@ -124,7 +124,8 @@ func (r *Resolver) Resolve(reqs []*chart.Dependency, repoNames map[string]string
 			When using a "git:" type repository, the "version" should be a valid branch or tag name`, d.Name, d.Version)
 			}
 
-			gitRepoName := strings.TrimSuffix(strings.Split(d.Repository, "/")[len(strings.Split(d.Repository, "/"))-1], ".git")
+			parts := strings.Split(d.Repository, "/")
+			gitRepoName := strings.TrimSuffix(parts[len(parts)-1], ".git")
 			if d.Name != gitRepoName {
 				return nil, errors.New(fmt.Sprintf("The name of dependency %s should be %s", d.Repository, gitRepoName))
 			}
@@ -134,10 +135,6 @@ func (r *Resolver) Resolve(reqs []*chart.Dependency, repoNames map[string]string
 				Version:    d.Version,
 			}
 			continue
-		}
-
-		if err != nil {
-			return nil, errors.Wrapf(err, "dependency %q has an invalid version/constraint format", d.Name)
 		}
 
 		repoName := repoNames[d.Name]

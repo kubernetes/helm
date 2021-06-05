@@ -355,7 +355,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 				getter.WithTagName(version))
 		}
 
-		if strings.HasPrefix(churl, "git:") {
+		if strings.HasPrefix(churl, "git://") {
 			version = dep.Version
 
 			dl.Options = append(dl.Options, getter.WithTagName(version))
@@ -595,7 +595,7 @@ func (m *Manager) resolveRepoNames(deps []*chart.Dependency) (map[string]string,
 		// if dep chart is from a git url, assume it is valid for now.
 		// if the repo does not exist then it will later error when we try to fetch branches and tags.
 		// we could check for the repo existence here, but trying to avoid anotehr git request.
-		if strings.HasPrefix(dd.Repository, "git:") {
+		if strings.HasPrefix(dd.Repository, "git://") {
 			if m.Debug {
 				fmt.Fprintf(m.Out, "Repository from git url: %s\n", strings.TrimPrefix(dd.Repository, "git:"))
 			}
@@ -712,8 +712,8 @@ func (m *Manager) parallelRepoUpdate(repos []*repo.Entry) error {
 //
 // If it finds a URL that is "relative", it will prepend the repoURL.
 func (m *Manager) findChartURL(name, version, repoURL string, repos map[string]*repo.ChartRepository) (url, username, password string, insecureskiptlsverify, passcredentialsall bool, caFile, certFile, keyFile string, err error) {
-	if strings.HasPrefix(repoURL, "git:") {
-		return repoURL, "", "", false, nil
+	if strings.HasPrefix(repoURL, "git://") {
+		return repoURL, "", "", false, false, "", "", "", nil
 	}
 
 	if strings.HasPrefix(repoURL, "oci://") {

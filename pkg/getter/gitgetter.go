@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -60,13 +59,13 @@ func (g *GITGetter) Get(href string, options ...Option) (*bytes.Buffer, error) {
 }
 
 func (g *GITGetter) get(href string) (*bytes.Buffer, error) {
-	gitURL := strings.TrimPrefix(href, "git:")
+	gitURL := strings.TrimPrefix(href, "git://")
 	version := g.opts.version
 	chartName := g.opts.chartName
 	if version == "" {
 		return nil, fmt.Errorf("The version must be a valid tag or branch name for the git repo, not nil")
 	}
-	tmpDir, err := ioutil.TempDir("", "helm")
+	tmpDir, err := os.MkdirTemp("", "helm")
 	if err != nil {
 		return nil, err
 	}

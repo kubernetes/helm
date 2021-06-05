@@ -83,7 +83,7 @@ func TestFindChartURL(t *testing.T) {
 	}{
 		{name: "alpine", version: "0.1.0", repoURL: "http://example.com/charts", expectChurl: "https://charts.helm.sh/stable/alpine-0.1.0.tgz", expectUserName: "", expectPassword: "", expectInsecureSkipTLSVerify: false, expectPasscredentialsall: false},
 		{name: "tlsfoo", version: "1.2.3", repoURL: "https://example-https-insecureskiptlsverify.com", expectChurl: "https://example.com/tlsfoo-1.2.3.tgz", expectUserName: "", expectPassword: "", expectInsecureSkipTLSVerify: true, expectPasscredentialsall: false},
-		{name: "helm-test", version: "master", repoURL: "git:https://github.com/rally25rs/helm-test-chart.git", expectChurl: "git:https://github.com/rally25rs/helm-test-chart.git", expectUserName: "", expectPassword: "", expectInsecureSkipTLSVerify: false, expectPasscredentialsall: false},
+		{name: "helm-test", version: "master", repoURL: "git://https://github.com/rally25rs/helm-test-chart.git", expectChurl: "git://https://github.com/rally25rs/helm-test-chart.git", expectUserName: "", expectPassword: "", expectInsecureSkipTLSVerify: false, expectPasscredentialsall: false},
 	}
 	for _, tt := range tests {
 		churl, username, password, insecureSkipTLSVerify, passcredentialsall, _, _, _, err := m.findChartURL(tt.name, tt.version, tt.repoURL, repos)
@@ -174,9 +174,9 @@ func TestGetRepoNames(t *testing.T) {
 		{
 			name: "repo from git url",
 			req: []*chart.Dependency{
-				{Name: "local-dep", Repository: "git:https://github.com/git/git"},
+				{Name: "local-dep", Repository: "git://https://github.com/git/git"},
 			},
-			expect: map[string]string{"local-dep": "git:https://github.com/git/git"},
+			expect: map[string]string{"local-dep": "git://https://github.com/git/git"},
 		},
 	}
 
