@@ -20,7 +20,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -823,7 +822,7 @@ func writeLock(chartpath string, lock *chart.Lock, legacyLockfile bool) error {
 		lockfileName = "requirements.lock"
 	}
 	dest := filepath.Join(chartpath, lockfileName)
-	return ioutil.WriteFile(dest, data, 0644)
+	return os.WriteFile(dest, data, 0644)
 }
 
 // archive a dep chart from local directory and save it into charts/
@@ -864,7 +863,7 @@ func tarFromLocalDir(chartpath, name, repo, version string) (string, error) {
 
 // move files from tmppath to destpath
 func move(tmpPath, destPath string) error {
-	files, _ := ioutil.ReadDir(tmpPath)
+	files, _ := os.ReadDir(tmpPath)
 	for _, file := range files {
 		filename := file.Name()
 		tmpfile := filepath.Join(tmpPath, filename)
