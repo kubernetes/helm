@@ -35,6 +35,10 @@ type GITGetter struct {
 	opts options
 }
 
+func (g *GITGetter) ChartName() string {
+	return g.opts.chartName
+}
+
 // ensureGitDirIgnored will append ".git/" to the .helmignore file in a directory.
 // Create the .helmignore file if it does not exist.
 func (g *GITGetter) ensureGitDirIgnored(repoPath string) error {
@@ -92,7 +96,7 @@ func (g *GITGetter) get(href string) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-// NewGITGetter constructs a valid http/https client as a Getter
+// NewGITGetter constructs a valid git client as a Getter
 func NewGITGetter(ops ...Option) (Getter, error) {
 
 	client := GITGetter{}

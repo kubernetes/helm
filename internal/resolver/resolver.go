@@ -121,14 +121,9 @@ func (r *Resolver) Resolve(reqs []*chart.Dependency, repoNames map[string]string
 
 			if !found {
 				return nil, fmt.Errorf(`dependency %q is missing git branch or tag: %s.
-			When using a "git:" type repository, the "version" should be a valid branch or tag name`, d.Name, d.Version)
+			When using a "git://" type repository, the "version" should be a valid branch or tag name`, d.Name, d.Version)
 			}
 
-			parts := strings.Split(d.Repository, "/")
-			gitRepoName := strings.TrimSuffix(parts[len(parts)-1], ".git")
-			if d.Name != gitRepoName {
-				return nil, errors.New(fmt.Sprintf("The name of dependency %s should be %s", d.Repository, gitRepoName))
-			}
 			locked[i] = &chart.Dependency{
 				Name:       d.Name,
 				Repository: d.Repository,

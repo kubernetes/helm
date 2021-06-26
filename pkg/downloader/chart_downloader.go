@@ -94,9 +94,11 @@ func (c *ChartDownloader) DownloadTo(ref, version, dest string) (string, *proven
 	}
 
 	scheme := ""
-	scheme = u.Scheme
+
 	if strings.HasPrefix(ref, "git://") {
 		scheme = "git"
+	} else {
+		scheme = u.Scheme
 	}
 
 	g, err := c.Getters.ByScheme(scheme)
@@ -114,7 +116,11 @@ func (c *ChartDownloader) DownloadTo(ref, version, dest string) (string, *proven
 		name = fmt.Sprintf("%s-%s.tgz", name, version)
 	}
 	if scheme == "git" {
-		name = fmt.Sprintf("%s-%s.tgz", strings.TrimSuffix(name, ".git"), version)
+		gitGetter, ok := g.(*getter.GITGetter)
+		if !ok {
+			return "", nil, fmt.Errorf("can't convert to GITGetter")
+		}
+		name = fmt.Sprintf("%s-%s.tgz", gitGetter.ChartName(), version)
 	}
 
 	destfile := filepath.Join(dest, name)
