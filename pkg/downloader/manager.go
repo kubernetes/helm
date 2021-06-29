@@ -377,7 +377,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 				return err
 			}
 		}
-		// after cleanup, we can copy all downloaded charts to destPath
+		// after cleanup, we can move all downloaded charts to destPath
 		if err := move(tmpPath, destPath); err != nil {
 			return err
 		}
