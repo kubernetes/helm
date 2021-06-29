@@ -255,8 +255,9 @@ func TestDownloadAll(t *testing.T) {
 		Version:    local.Metadata.Version,
 	}
 
-	if err := m.downloadAll([]*chart.Dependency{signDep, localDep}); err != nil {
-		t.Error(err)
+	// create a 'tmpcharts' directory to test #5567
+	if err := os.MkdirAll(filepath.Join(chartPath, "tmpcharts"), 0755); err != nil {
+		t.Fatal(err)
 	}
 	if err := m.downloadAll([]*chart.Dependency{signDep, localDep}); err != nil {
 		t.Error(err)
