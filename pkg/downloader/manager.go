@@ -413,6 +413,9 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 	}
 
 	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
 		filename := file.Name()
 		sourcefile := filepath.Join(source, filename)
 		destfile := filepath.Join(dest, filename)
