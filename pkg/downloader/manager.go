@@ -373,7 +373,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 			if dep.Repository == "" {
 				continue
 			}
-			if err := m.safeDeleteDep(dep.Name, tmpPath); err != nil {
+			if err := m.safeDeleteDep(dep.Name, destPath); err != nil {
 				return err
 			}
 		}
