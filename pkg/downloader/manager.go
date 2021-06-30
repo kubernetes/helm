@@ -373,13 +373,10 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 			if dep.Repository == "" {
 				continue
 			}
-			if err := m.safeDeleteDep(dep.Name, destPath); err != nil {
+			// now we can move all downloaded charts to destPath
+			if err := m.safeMoveDeps(tmpPath, destPath); err != nil {
 				return err
 			}
-		}
-		// after cleanup, we can move all downloaded charts to destPath
-		if err := move(tmpPath, destPath); err != nil {
-			return err
 		}
 	} else {
 		fmt.Fprintln(m.Out, "Save error occurred: ", saveError)
@@ -400,33 +397,32 @@ func parseOCIRef(chartRef string) (string, string, error) {
 	return chartRef, tag, nil
 }
 
-// safeDeleteDep deletes any versions of the given dependency in the given directory.
+// safeMoveDep moves all dependencies in the source and moves them into dest.
 //
 // It does this by first matching the file name to an expected pattern, then loading
-// the file to verify that it is a chart with the same name as the given name.
+// the file to verify that it is a chart.
 //
-// Because it requires tar file introspection, it is more intensive than a basic delete.
+// Because it requires tar file introspection, it is more intensive than a basic move.
 //
 // This will only return errors that should stop processing entirely. Other errors
 // will emit log messages or be ignored.
-func (m *Manager) safeDeleteDep(name, dir string) error {
-	files, err := filepath.Glob(filepath.Join(dir, name+"-*.tgz"))
+func (m *Manager) safeMoveDeps(source, dest string) error {
+	files, err := ioutil.ReadDir(source)
 	if err != nil {
-		// Only for ErrBadPattern
 		return err
 	}
-	for _, fname := range files {
-		ch, err := loader.LoadFile(fname)
-		if err != nil {
-			fmt.Fprintf(m.Out, "Could not verify %s for deletion: %s (Skipping)", fname, err)
+
+	for _, file := range files {
+		filename := file.Name()
+		sourcefile := filepath.Join(source, filename)
+		destfile := filepath.Join(dest, filename)
+		if _, err := loader.LoadFile(destfile); err != nil {
+			fmt.Fprintf(m.Out, "Could not verify %s for deletion: %s (Skipping)", destfile, err)
 			continue
 		}
-		if ch.Name() != name {
-			// This is not the file you are looking for.
-			continue
-		}
-		if err := os.Remove(fname); err != nil {
-			fmt.Fprintf(m.Out, "Could not delete %s: %s (Skipping)", fname, err)
+		// NOTE: no need to delete the source; os.Rename replaces it.
+		if err := fs.RenameWithFallback(sourcefile, destfile); err != nil {
+			fmt.Fprintf(m.Out, "Unable to move %s to charts dir %s (Skipping)", sourcefile, err)
 			continue
 		}
 	}
@@ -856,20 +852,6 @@ func tarFromLocalDir(chartpath, name, repo, version string) (string, error) {
 	}
 
 	return "", errors.Errorf("can't get a valid version for dependency %s", name)
-}
-
-// move files from tmppath to destpath
-func move(tmpPath, destPath string) error {
-	files, _ := ioutil.ReadDir(tmpPath)
-	for _, file := range files {
-		filename := file.Name()
-		tmpfile := filepath.Join(tmpPath, filename)
-		destfile := filepath.Join(destPath, filename)
-		if err := fs.RenameWithFallback(tmpfile, destfile); err != nil {
-			return errors.Wrap(err, "unable to move local charts to charts dir")
-		}
-	}
-	return nil
 }
 
 // The prefix to use for cache keys created by the manager for repo names
