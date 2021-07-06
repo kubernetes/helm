@@ -47,6 +47,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	cachetools "k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+	"k8s.io/client-go/util/retry"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
@@ -377,18 +378,26 @@ func batchPerform(infos ResourceList, fn func(*resource.Info) error, errs chan<-
 }
 
 func createResource(info *resource.Info) error {
-	obj, err := resource.NewHelper(info.Client, info.Mapping).Create(info.Namespace, true, info.Object)
-	if err != nil {
-		return err
-	}
-	return info.Refresh(obj, true)
+	return retry.RetryOnConflict(
+		retry.DefaultRetry,
+		func() error {
+			obj, err := resource.NewHelper(info.Client, info.Mapping).Create(info.Namespace, true, info.Object)
+			if err != nil {
+				return err
+			}
+			return info.Refresh(obj, true)
+		})
 }
 
 func deleteResource(info *resource.Info) error {
-	policy := metav1.DeletePropagationBackground
-	opts := &metav1.DeleteOptions{PropagationPolicy: &policy}
-	_, err := resource.NewHelper(info.Client, info.Mapping).DeleteWithOptions(info.Namespace, info.Name, opts)
-	return err
+	return retry.RetryOnConflict(
+		retry.DefaultRetry,
+		func() error {
+			policy := metav1.DeletePropagationBackground
+			opts := &metav1.DeleteOptions{PropagationPolicy: &policy}
+			_, err := resource.NewHelper(info.Client, info.Mapping).DeleteWithOptions(info.Namespace, info.Name, opts)
+			return err
+		})
 }
 
 func createPatch(target *resource.Info, current runtime.Object) ([]byte, types.PatchType, error) {
