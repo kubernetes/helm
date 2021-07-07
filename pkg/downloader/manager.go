@@ -373,10 +373,10 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 			if dep.Repository == "" {
 				continue
 			}
-			// now we can move all downloaded charts to destPath
-			if err := m.safeMoveDeps(tmpPath, destPath); err != nil {
-				return err
-			}
+		}
+		// now we can move all downloaded charts to destPath
+		if err := m.safeMoveDeps(tmpPath, destPath); err != nil {
+			return err
 		}
 	} else {
 		fmt.Fprintln(m.Out, "Save error occurred: ", saveError)
@@ -407,18 +407,25 @@ func parseOCIRef(chartRef string) (string, string, error) {
 // This will only return errors that should stop processing entirely. Other errors
 // will emit log messages or be ignored.
 func (m *Manager) safeMoveDeps(source, dest string) error {
-	files, err := ioutil.ReadDir(source)
+	existsInSourceDirectory := map[string]bool{}
+	sourceFiles, err := ioutil.ReadDir(source)
+	if err != nil {
+		return err
+	}
+	// attempt to read destFiles; fail fast if we can't
+	destFiles, err := ioutil.ReadDir(dest)
 	if err != nil {
 		return err
 	}
 
-	for _, file := range files {
+	for _, file := range sourceFiles {
 		if file.IsDir() {
 			continue
 		}
 		filename := file.Name()
 		sourcefile := filepath.Join(source, filename)
 		destfile := filepath.Join(dest, filename)
+		existsInSourceDirectory[filename] = true
 		if _, err := loader.LoadFile(sourcefile); err != nil {
 			fmt.Fprintf(m.Out, "Could not verify %s for moving: %s (Skipping)", sourcefile, err)
 			continue
@@ -429,6 +436,21 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 			continue
 		}
 	}
+
+	// find all files that exist in dest that do not exist in source; delete them (outdated dependendencies)
+	for _, file := range destFiles {
+		if !file.IsDir() && !existsInSourceDirectory[file.Name()] {
+			fname := filepath.Join(dest, file.Name())
+			if _, err := loader.LoadFile(fname); err != nil {
+				fmt.Fprintf(m.Out, "Could not verify %s for deletion: %s (Skipping)", fname, err)
+			}
+			if err := os.Remove(fname); err != nil {
+				fmt.Fprintf(m.Out, "Could not delete %s: %s (Skipping)", fname, err)
+				continue
+			}
+		}
+	}
+
 	return nil
 }
 
