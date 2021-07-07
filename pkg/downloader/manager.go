@@ -419,11 +419,11 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 		filename := file.Name()
 		sourcefile := filepath.Join(source, filename)
 		destfile := filepath.Join(dest, filename)
-		if _, err := loader.LoadFile(destfile); err != nil {
-			fmt.Fprintf(m.Out, "Could not verify %s for deletion: %s (Skipping)", destfile, err)
+		if _, err := loader.LoadFile(sourcefile); err != nil {
+			fmt.Fprintf(m.Out, "Could not verify %s for moving: %s (Skipping)", sourcefile, err)
 			continue
 		}
-		// NOTE: no need to delete the source; os.Rename replaces it.
+		// NOTE: no need to delete the dest; os.Rename replaces it.
 		if err := fs.RenameWithFallback(sourcefile, destfile); err != nil {
 			fmt.Fprintf(m.Out, "Unable to move %s to charts dir %s (Skipping)", sourcefile, err)
 			continue
