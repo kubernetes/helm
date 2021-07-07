@@ -152,7 +152,12 @@ func (ch *Chart) CRDs() []*File {
 
 // CRDObjects returns a list of CRD objects in the 'crds/' directory of a Helm chart & subcharts
 func (ch *Chart) CRDObjects() []CRD {
+	return append(ch.CurrentCRDObject(), ch.DependenciesCRDObject()...)
+}
+
+func (ch *Chart) CurrentCRDObject() []CRD {
 	crds := []CRD{}
+
 	// Find all resources in the crds/ directory
 	for _, f := range ch.Files {
 		if strings.HasPrefix(f.Name, "crds/") && hasManifestExtension(f.Name) {
@@ -160,6 +165,12 @@ func (ch *Chart) CRDObjects() []CRD {
 			crds = append(crds, mycrd)
 		}
 	}
+	return crds
+}
+
+func (ch *Chart) DependenciesCRDObject() []CRD {
+	crds := []CRD{}
+
 	// Get CRDs from dependencies, too.
 	for _, dep := range ch.Dependencies() {
 		crds = append(crds, dep.CRDObjects()...)

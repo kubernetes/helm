@@ -89,6 +89,7 @@ type Install struct {
 	OutputDir                string
 	Atomic                   bool
 	SkipCRDs                 bool
+	SkipDependenciesCRDs     bool
 	SubNotes                 bool
 	DisableOpenAPIValidation bool
 	IncludeCRDs              bool
@@ -184,7 +185,13 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 
 	// Pre-install anything in the crd/ directory. We do this before Helm
 	// contacts the upstream server and builds the capabilities object.
-	if crds := chrt.CRDObjects(); !i.ClientOnly && !i.SkipCRDs && len(crds) > 0 {
+	if !i.ClientOnly && !i.SkipCRDs {
+		var crds []chart.CRD
+		if !i.SkipDependenciesCRDs {
+			crds = chrt.CRDObjects()
+		} else {
+			crds = chrt.CurrentCRDObject()
+		}
 		// On dry run, bail here
 		if i.DryRun {
 			i.cfg.Log("WARNING: This chart or one of its subcharts contains CRDs. Rendering may fail or contain inaccuracies.")
