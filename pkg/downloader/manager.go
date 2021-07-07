@@ -368,7 +368,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 	// TODO: this should probably be refactored to be a []error, so we can capture and provide more information rather than "last error wins".
 	if saveError == nil {
 		// now we can move all downloaded charts to destPath and delete outdated dependencies
-		if err := m.safeMoveDeps(tmpPath, destPath); err != nil {
+		if err := m.safeMoveDeps(deps, tmpPath, destPath); err != nil {
 			return err
 		}
 	} else {
@@ -401,8 +401,9 @@ func parseOCIRef(chartRef string) (string, string, error) {
 //
 // This will only return errors that should stop processing entirely. Other errors
 // will emit log messages or be ignored.
-func (m *Manager) safeMoveDeps(source, dest string) error {
+func (m *Manager) safeMoveDeps(deps []*chart.Dependency, source, dest string) error {
 	existsInSourceDirectory := map[string]bool{}
+	isLocalDependency := map[string]bool{}
 	sourceFiles, err := ioutil.ReadDir(source)
 	if err != nil {
 		return err
@@ -411,6 +412,12 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 	destFiles, err := ioutil.ReadDir(dest)
 	if err != nil {
 		return err
+	}
+
+	for _, dep := range deps {
+		if dep.Repository == "" {
+			isLocalDependency[dep.Name] = true
+		}
 	}
 
 	for _, file := range sourceFiles {
@@ -437,8 +444,13 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 	for _, file := range destFiles {
 		if !file.IsDir() && !existsInSourceDirectory[file.Name()] {
 			fname := filepath.Join(dest, file.Name())
-			if _, err := loader.LoadFile(fname); err != nil {
+			ch, err := loader.LoadFile(fname)
+			if err != nil {
 				fmt.Fprintf(m.Out, "Could not verify %s for deletion: %s (Skipping)", fname, err)
+			}
+			// local dependency - skip
+			if isLocalDependency[ch.Name()] {
+				continue
 			}
 			if err := os.Remove(fname); err != nil {
 				fmt.Fprintf(m.Out, "Could not delete %s: %s (Skipping)", fname, err)
