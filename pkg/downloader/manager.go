@@ -367,14 +367,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 
 	// TODO: this should probably be refactored to be a []error, so we can capture and provide more information rather than "last error wins".
 	if saveError == nil {
-		fmt.Fprintln(m.Out, "Deleting outdated charts")
-		for _, dep := range deps {
-			// No repository means the chart is already in the charts directory; we validated them earlier, and now they stay in place.
-			if dep.Repository == "" {
-				continue
-			}
-		}
-		// now we can move all downloaded charts to destPath
+		// now we can move all downloaded charts to destPath and delete outdated dependencies
 		if err := m.safeMoveDeps(tmpPath, destPath); err != nil {
 			return err
 		}
@@ -401,6 +394,8 @@ func parseOCIRef(chartRef string) (string, string, error) {
 //
 // It does this by first matching the file name to an expected pattern, then loading
 // the file to verify that it is a chart.
+//
+// Any charts in dest that do not exist in source are removed (barring local dependencies)
 //
 // Because it requires tar file introspection, it is more intensive than a basic move.
 //
@@ -437,6 +432,7 @@ func (m *Manager) safeMoveDeps(source, dest string) error {
 		}
 	}
 
+	fmt.Fprintln(m.Out, "Deleting outdated charts")
 	// find all files that exist in dest that do not exist in source; delete them (outdated dependendencies)
 	for _, file := range destFiles {
 		if !file.IsDir() && !existsInSourceDirectory[file.Name()] {
