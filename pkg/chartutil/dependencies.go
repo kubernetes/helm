@@ -19,15 +19,44 @@ import (
 	"log"
 	"strings"
 
+	"github.com/mitchellh/copystructure"
+
 	"helm.sh/helm/v3/pkg/chart"
 )
 
 // ProcessDependencies checks through this chart's dependencies, processing accordingly.
+func ProcessDependenciesWithValues(c *chart.Chart, vals map[string]interface{}) error {
+	v, err := copystructure.Copy(vals)
+	if err != nil {
+		return err
+	}
+
+	valsCopy := v.(map[string]interface{})
+	// if we have an empty map, make sure it is initialized
+	if valsCopy == nil {
+		valsCopy = make(map[string]interface{})
+	}
+	return process(c, valsCopy)
+}
+
+// ProcessDependencies checks through this chart's dependencies, processing accordingly.
+//
+// Deprecated: ProcessDependencies. Use ProcessDependenciesWithValues
 func ProcessDependencies(c *chart.Chart, v Values) error {
 	if err := processDependencyEnabled(c, v, ""); err != nil {
 		return err
 	}
-	return processDependencyImportValues(c)
+	return processDependencyImportValues(c, v)
+}
+
+// process processes the dependencies
+//
+// This is a helper function for ProcessDependencies.
+func process(c *chart.Chart, vals map[string]interface{}) error {
+	if err := processDependencyEnabled(c, vals, ""); err != nil {
+		return err
+	}
+	return processDependencyImportValues(c, vals)
 }
 
 // processDependencyConditions disables charts based on condition path value in values
@@ -217,12 +246,11 @@ func set(path []string, data map[string]interface{}) map[string]interface{} {
 }
 
 // processImportValues merges values from child to parent based on the chart's dependencies' ImportValues field.
-func processImportValues(c *chart.Chart) error {
+func processImportValues(c *chart.Chart, v map[string]interface{}) error {
 	if c.Metadata.Dependencies == nil {
 		return nil
 	}
-	// combine chart values and empty config to get Values
-	cvals, err := CoalesceValues(c, nil)
+	cvals, err := CoalesceValues(c, v)
 	if err != nil {
 		return err
 	}
@@ -247,8 +275,8 @@ func processImportValues(c *chart.Chart) error {
 					log.Printf("Warning: ImportValues missing table from chart %s: %v", r.Name, err)
 					continue
 				}
-				// create value map from child to be merged into parent
-				b = CoalesceTables(cvals, pathToMap(parent, vv.AsMap()))
+				// create value map from child to be merged into parent values
+				b = CoalesceTables(b, pathToMap(parent, vv.AsMap()))
 			case string:
 				child := "exports." + iv
 				outiv = append(outiv, map[string]string{
@@ -267,19 +295,19 @@ func processImportValues(c *chart.Chart) error {
 		r.ImportValues = outiv
 	}
 
-	// set the new values
-	c.Values = CoalesceTables(b, cvals)
+	// merge the import values into the chart config
+	c.Values = CoalesceTables(b, c.Values)
 
 	return nil
 }
 
 // processDependencyImportValues imports specified chart values from child to parent.
-func processDependencyImportValues(c *chart.Chart) error {
+func processDependencyImportValues(c *chart.Chart, v map[string]interface{}) error {
 	for _, d := range c.Dependencies() {
 		// recurse
-		if err := processDependencyImportValues(d); err != nil {
+		if err := processDependencyImportValues(d, v); err != nil {
 			return err
 		}
 	}
-	return processImportValues(c)
+	return processImportValues(c, v)
 }
