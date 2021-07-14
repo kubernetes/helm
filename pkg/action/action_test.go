@@ -25,12 +25,14 @@ import (
 	"testing"
 
 	dockerauth "github.com/deislabs/oras/pkg/auth/docker"
+	"github.com/stretchr/testify/assert"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 
 	"helm.sh/helm/v3/internal/experimental/registry"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	kubefake "helm.sh/helm/v3/pkg/kube/fake"
+	"helm.sh/helm/v3/pkg/postrender"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
@@ -318,4 +320,73 @@ func TestGetVersionSet(t *testing.T) {
 	if vs.Has("nosuchversion/v1") {
 		t.Error("Non-existent version is reported found.")
 	}
+}
+
+var originalRenderStrategy = renderStrategy
+var originalLocalRenderStrategy = localRenderStrategy
+
+func renderStrategyDecorator(decoratorAction func(ch *chart.Chart, values chartutil.Values), strategy renderStrategyFunction) renderStrategyFunction {
+	return func(ch *chart.Chart, values chartutil.Values) (map[string]string, error) {
+		decoratorAction(ch, values)
+		return strategy(ch, values)
+	}
+}
+
+func TestRenderResources_RendersWithStrategy(t *testing.T) {
+	var rendered = false
+	var renderedChart *chart.Chart
+	var renderedValues *chartutil.Values
+	var captureChartAndValues = func(ch *chart.Chart, values chartutil.Values) {
+		renderedChart = ch
+		renderedValues = &values
+	}
+	renderStrategy = func(cfg *Configuration) renderStrategyFunction {
+		rendered = true
+
+		return renderStrategyDecorator(captureChartAndValues, originalRenderStrategy(cfg))
+	}
+
+	var chart = buildChart()
+	values := chartutil.Values{
+		"is": "me",
+	}
+	var postRender postrender.PostRenderer
+	actionConfigFixture(t).renderResources(chart, values, "", "", false, false, false, postRender)
+
+	assert.True(t, rendered, "the chart should be rendered with cluster contact")
+	assert.Same(t, chart, renderedChart, "the rendered chart and the chart resource should be the same")
+	assert.Equal(t, values, *renderedValues, "the rendered values and the values resource should be the same")
+}
+
+func TestRenderResourcesLocally_RendersWithLocalStrategy(t *testing.T) {
+	var renderedLocally = false
+	var rendered = false
+	var renderedChart *chart.Chart
+	var renderedValues *chartutil.Values
+	var captureChartAndValues = func(ch *chart.Chart, values chartutil.Values) {
+		renderedChart = ch
+		renderedValues = &values
+	}
+	renderStrategy = func(cfg *Configuration) renderStrategyFunction {
+		rendered = true
+
+		return renderStrategyDecorator(captureChartAndValues, originalRenderStrategy(cfg))
+	}
+	localRenderStrategy = func(ch *chart.Chart, values chartutil.Values) (map[string]string, error) {
+		renderedLocally = true
+
+		return renderStrategyDecorator(captureChartAndValues, originalLocalRenderStrategy)(ch, values)
+	}
+
+	var chart = buildChart()
+	values := chartutil.Values{
+		"is": "me",
+	}
+	var postRender postrender.PostRenderer
+	actionConfigFixture(t).renderResourcesLocally(chart, values, "", "", false, false, false, postRender)
+
+	assert.False(t, rendered, "the chart should note be rendered with cluster contact")
+	assert.True(t, renderedLocally, "the chart should be rendered without cluster contact")
+	assert.Same(t, chart, renderedChart, "the rendered chart and the chart resource should be the same")
+	assert.Equal(t, values, *renderedValues, "the rendered values and the values resource should be the same")
 }
