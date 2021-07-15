@@ -21,7 +21,15 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 )
 
+func fakeGetRefs(gitRepoURL string) (map[string]string, error) {
+	refs := map[string]string{
+		"1.0.0": "9668ad4d90c5e95bd520e58e7387607be6b63bb6",
+	}
+	return refs, nil
+}
+
 func TestResolve(t *testing.T) {
+	gitGetRefs = fakeGetRefs
 	tests := []struct {
 		name   string
 		req    []*chart.Dependency
@@ -134,6 +142,28 @@ func TestResolve(t *testing.T) {
 				},
 			},
 			err: true,
+		},
+		{
+			name: "repo from git ssh url",
+			req: []*chart.Dependency{
+				{Name: "gitdependency", Repository: "git:git@github.com:helm/gitdependency.git", Version: "1.0.0"},
+			},
+			expect: &chart.Lock{
+				Dependencies: []*chart.Dependency{
+					{Name: "gitdependency", Repository: "git:git@github.com:helm/gitdependency.git", Version: "1.0.0"},
+				},
+			},
+		},
+		{
+			name: "repo from git https url",
+			req: []*chart.Dependency{
+				{Name: "gitdependency", Repository: "https://github.com/helm/gitdependency.git", Version: "1.0.0"},
+			},
+			expect: &chart.Lock{
+				Dependencies: []*chart.Dependency{
+					{Name: "gitdependency", Repository: "https://github.com/helm/gitdependency.git", Version: "1.0.0"},
+				},
+			},
 		},
 	}
 

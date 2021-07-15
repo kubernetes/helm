@@ -1,0 +1,109 @@
+/*
+Copyright The Helm Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package getter
+
+import (
+	"bytes"
+	"strings"
+
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"helm.sh/helm/v3/internal/fileutil"
+	"helm.sh/helm/v3/pkg/gitutil"
+)
+
+// Assigned here so it can be overridden for testing.
+var gitCloneTo = gitutil.CloneTo
+
+// GITGetter is the default HTTP(/S) backend handler
+type GITGetter struct {
+	opts options
+}
+
+func (g *GITGetter) ChartName() string {
+	return g.opts.chartName
+}
+
+// ensureGitDirIgnored will append ".git/" to the .helmignore file in a directory.
+// Create the .helmignore file if it does not exist.
+func (g *GITGetter) ensureGitDirIgnored(repoPath string) error {
+	helmignorePath := filepath.Join(repoPath, ".helmignore")
+	f, err := os.OpenFile(helmignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.WriteString("\n.git/\n"); err != nil {
+		return err
+	}
+	return nil
+}
+
+//Get performs a Get from repo.Getter and returns the body.
+func (g *GITGetter) Get(href string, options ...Option) (*bytes.Buffer, error) {
+	for _, opt := range options {
+		opt(&g.opts)
+	}
+	return g.get(href)
+}
+
+func (g *GITGetter) get(href string) (*bytes.Buffer, error) {
+	gitURL := strings.TrimPrefix(href, "git://")
+	version := g.opts.version
+	chartName := g.opts.chartName
+	if version == "" {
+		return nil, fmt.Errorf("The version must be a valid tag or branch name for the git repo, not nil")
+	}
+	tmpDir, err := os.MkdirTemp("", "helm")
+	if err != nil {
+		return nil, err
+	}
+	chartTmpDir := filepath.Join(tmpDir, chartName)
+
+	if err := os.MkdirAll(chartTmpDir, 0755); err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err = gitCloneTo(gitURL, version, chartTmpDir); err != nil {
+		return nil, fmt.Errorf("Unable to retrieve git repo. %s", err)
+	}
+
+	// A .helmignore that includes an ignore for .git/ should be included in the git repo itself,
+	// but a lot of people will probably not think about that.
+	// To prevent the git history from bleeding into the charts archive, append/create .helmignore.
+	g.ensureGitDirIgnored(chartTmpDir)
+
+	buf, err := fileutil.CompressDirToTgz(chartTmpDir, tmpDir)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to tar and compress dir %s to tgz file. %s", tmpDir, err)
+	}
+	return buf, nil
+}
+
+// NewGITGetter constructs a valid git client as a Getter
+func NewGITGetter(ops ...Option) (Getter, error) {
+
+	client := GITGetter{}
+
+	for _, opt := range ops {
+		opt(&client.opts)
+	}
+
+	return &client, nil
+}

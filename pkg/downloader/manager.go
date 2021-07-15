@@ -339,6 +339,7 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 		}
 
 		version := ""
+
 		if strings.HasPrefix(churl, "oci://") {
 			if !resolver.FeatureGateOCI.IsEnabled() {
 				return errors.Wrapf(resolver.FeatureGateOCI.Error(),
@@ -352,6 +353,17 @@ func (m *Manager) downloadAll(deps []*chart.Dependency) error {
 			dl.Options = append(dl.Options,
 				getter.WithRegistryClient(m.RegistryClient),
 				getter.WithTagName(version))
+		}
+
+		if strings.HasPrefix(churl, "git://") {
+			version = dep.Version
+
+			dl.Options = append(dl.Options, getter.WithTagName(version))
+			dl.Options = append(dl.Options, getter.WithChartName(dep.Name))
+
+			if m.Debug {
+				fmt.Fprintf(m.Out, "Downloading %s from git repo %s\n", dep.Name, churl)
+			}
 		}
 
 		_, _, err = dl.DownloadTo(churl, version, destPath)
@@ -458,6 +470,11 @@ Loop:
 	for _, dd := range deps {
 		// If repo is from local path or OCI, continue
 		if strings.HasPrefix(dd.Repository, "file://") || strings.HasPrefix(dd.Repository, "oci://") {
+			continue
+		}
+
+		// If repo is from git url, continue
+		if strings.HasPrefix(dd.Repository, "git:") {
 			continue
 		}
 
@@ -575,7 +592,13 @@ func (m *Manager) resolveRepoNames(deps []*chart.Dependency) (map[string]string,
 			continue
 		}
 
-		if strings.HasPrefix(dd.Repository, "oci://") {
+		// if dep chart is from a git url, assume it is valid for now.
+		// if the repo does not exist then it will later error when we try to fetch branches and tags.
+		// we could check for the repo existence here, but trying to avoid anotehr git request.
+		if strings.HasPrefix(dd.Repository, "git://") {
+			if m.Debug {
+				fmt.Fprintf(m.Out, "Repository from git url: %s\n", strings.TrimPrefix(dd.Repository, "git:"))
+			}
 			reposMap[dd.Name] = dd.Repository
 			continue
 		}
@@ -689,6 +712,10 @@ func (m *Manager) parallelRepoUpdate(repos []*repo.Entry) error {
 //
 // If it finds a URL that is "relative", it will prepend the repoURL.
 func (m *Manager) findChartURL(name, version, repoURL string, repos map[string]*repo.ChartRepository) (url, username, password string, insecureskiptlsverify, passcredentialsall bool, caFile, certFile, keyFile string, err error) {
+	if strings.HasPrefix(repoURL, "git://") {
+		return repoURL, "", "", false, false, "", "", "", nil
+	}
+
 	if strings.HasPrefix(repoURL, "oci://") {
 		return fmt.Sprintf("%s/%s:%s", repoURL, name, version), "", "", false, false, "", "", "", nil
 	}
