@@ -70,6 +70,7 @@ func newSearchHubCmd(out io.Writer) *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&o.searchEndpoint, "endpoint", "https://hub.helm.sh", "Hub instance to query for charts")
 	f.UintVar(&o.maxColWidth, "max-col-width", 50, "maximum column width for output table")
+
 	bindOutputFlag(cmd, &o.outputFormat)
 
 	return cmd
@@ -91,11 +92,17 @@ func (o *searchHubOptions) run(out io.Writer, args []string) error {
 	return o.outputFormat.Write(out, newHubSearchWriter(results, o.searchEndpoint, o.maxColWidth))
 }
 
+type hubChartRepo struct {
+	URL  string `json:"url"`
+	Name string `json:"name"`
+}
+
 type hubChartElement struct {
-	URL         string `json:"url"`
-	Version     string `json:"version"`
-	AppVersion  string `json:"app_version"`
-	Description string `json:"description"`
+	URL         string       `json:"url"`
+	Version     string       `json:"version"`
+	AppVersion  string       `json:"app_version"`
+	Description string       `json:"description"`
+	Repository  hubChartRepo `json:"repository"`
 }
 
 type hubSearchWriter struct {
@@ -114,7 +121,7 @@ func newHubSearchWriter(results []monocular.SearchResult, endpoint string, colum
 			url = r.ArtifactHub.PackageURL
 		}
 
-		elements = append(elements, hubChartElement{url, r.Relationships.LatestChartVersion.Data.Version, r.Relationships.LatestChartVersion.Data.AppVersion, r.Attributes.Description})
+		elements = append(elements, hubChartElement{url, r.Relationships.LatestChartVersion.Data.Version, r.Relationships.LatestChartVersion.Data.AppVersion, r.Attributes.Description, hubChartRepo{URL: r.Attributes.Repo.URL, Name: r.Attributes.Repo.Name}})
 	}
 	return &hubSearchWriter{elements, columnWidth}
 }
@@ -129,9 +136,11 @@ func (h *hubSearchWriter) WriteTable(out io.Writer) error {
 	}
 	table := uitable.New()
 	table.MaxColWidth = h.columnWidth
-	table.AddRow("URL", "CHART VERSION", "APP VERSION", "DESCRIPTION")
+
+	table.AddRow("URL", "CHART VERSION", "APP VERSION", "DESCRIPTION", "REPO")
+
 	for _, r := range h.elements {
-		table.AddRow(r.URL, r.Version, r.AppVersion, r.Description)
+		table.AddRow(r.URL, r.Version, r.AppVersion, r.Description, r.Repository.URL)
 	}
 	return output.EncodeTable(out, table)
 }
@@ -149,7 +158,7 @@ func (h *hubSearchWriter) encodeByFormat(out io.Writer, format output.Format) er
 	chartList := make([]hubChartElement, 0, len(h.elements))
 
 	for _, r := range h.elements {
-		chartList = append(chartList, hubChartElement{r.URL, r.Version, r.AppVersion, r.Description})
+		chartList = append(chartList, hubChartElement{r.URL, r.Version, r.AppVersion, r.Description, r.Repository})
 	}
 
 	switch format {

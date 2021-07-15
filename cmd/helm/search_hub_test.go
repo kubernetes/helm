@@ -33,9 +33,9 @@ func TestSearchHubCmd(t *testing.T) {
 	defer ts.Close()
 
 	// The expected output has the URL to the mocked search service in it
-	var expected = fmt.Sprintf(`URL                                             	CHART VERSION	APP VERSION	DESCRIPTION                                   
-%s/charts/stable/phpmyadmin 	3.0.0        	4.9.0-1    	phpMyAdmin is an mysql administration frontend
-%s/charts/bitnami/phpmyadmin	3.0.0        	4.9.0-1    	phpMyAdmin is an mysql administration frontend
+	var expected = fmt.Sprintf(`URL                                             	CHART VERSION	APP VERSION	DESCRIPTION                                   	REPO                         
+%s/charts/stable/phpmyadmin 	3.0.0        	4.9.0-1    	phpMyAdmin is an mysql administration frontend	https://charts.helm.sh/stable
+%s/charts/bitnami/phpmyadmin	3.0.0        	4.9.0-1    	phpMyAdmin is an mysql administration frontend	https://charts.bitnami.com   
 `, ts.URL, ts.URL)
 
 	testcmd := "search hub --endpoint " + ts.URL + " maria"
