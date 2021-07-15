@@ -94,7 +94,6 @@ func newTemplateCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 				var manifests bytes.Buffer
 				fmt.Fprintln(&manifests, strings.TrimSpace(rel.Manifest))
 				if !client.DisableHooks {
-					fileWritten := make(map[string]bool)
 					for _, m := range rel.Hooks {
 						if skipTests && isTestHook(m) {
 							continue
@@ -106,11 +105,10 @@ func newTemplateCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 							if client.UseReleaseName {
 								newDir = filepath.Join(client.OutputDir, client.ReleaseName)
 							}
-							err = writeToFile(newDir, m.Path, m.Manifest, fileWritten[m.Path])
+							err = writeToFile(newDir, m.Path, m.Manifest, true)
 							if err != nil {
 								return err
 							}
-							fileWritten[m.Path] = true
 						}
 
 					}
