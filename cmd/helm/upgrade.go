@@ -102,6 +102,7 @@ func newUpgradeCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 					instClient.DryRun = client.DryRun
 					instClient.DisableHooks = client.DisableHooks
 					instClient.SkipCRDs = client.SkipCRDs
+					instClient.SkipDependenciesCRDs = client.SkipDependenciesCRDs
 					instClient.Timeout = client.Timeout
 					instClient.Wait = client.Wait
 					instClient.WaitForJobs = client.WaitForJobs
@@ -198,6 +199,7 @@ func newUpgradeCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	f.BoolVar(&client.DisableHooks, "no-hooks", false, "disable pre/post upgrade hooks")
 	f.BoolVar(&client.DisableOpenAPIValidation, "disable-openapi-validation", false, "if set, the upgrade process will not validate rendered templates against the Kubernetes OpenAPI Schema")
 	f.BoolVar(&client.SkipCRDs, "skip-crds", false, "if set, no CRDs will be installed when an upgrade is performed with install flag enabled. By default, CRDs are installed if not already present, when an upgrade is performed with install flag enabled")
+	f.BoolVar(&client.SkipDependenciesCRDs, "skip-dependencies-crds", false, "if set, no CRDs for dependencies charts will be installed when an upgrade is performed with install flag enabled. By default, CRDs for dependencies charts are installed if not already present, when an upgrade is performed with install flag enabled")
 	f.DurationVar(&client.Timeout, "timeout", 300*time.Second, "time to wait for any individual Kubernetes operation (like Jobs for hooks)")
 	f.BoolVar(&client.ResetValues, "reset-values", false, "when upgrading, reset the values to the ones built into the chart")
 	f.BoolVar(&client.ReuseValues, "reuse-values", false, "when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f. If '--reset-values' is specified, this is ignored")

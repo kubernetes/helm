@@ -60,6 +60,8 @@ type Upgrade struct {
 	Namespace string
 	// SkipCRDs skips installing CRDs when install flag is enabled during upgrade
 	SkipCRDs bool
+	// SkipDependenciesCRDs skips installing CRDs for dependencies charts when install flag is enabled during upgrade
+	SkipDependenciesCRDs bool
 	// Timeout is the timeout for this operation
 	Timeout time.Duration
 	// Wait determines whether the wait operation should be performed after the upgrade is requested.
