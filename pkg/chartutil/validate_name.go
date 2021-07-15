@@ -37,7 +37,7 @@ var validName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-
 
 var (
 	// errMissingName indicates that a release (name) was not provided.
-	errMissingName = errors.New("no name provided")
+	errMissingName = errors.New("name is required")
 
 	// errInvalidName indicates that an invalid release name was provided
 	errInvalidName = errors.New(fmt.Sprintf(
@@ -53,6 +53,9 @@ var (
 
 const (
 	// maxNameLen is the maximum length Helm allows for a release name
+	// As of Kubernetes 1.4, the max limit on a name is 63 chars. We reserve 10 for
+	// charts to add data. Effectively, that gives us 53 chars.
+	// See https://github.com/helm/helm/issues/1528
 	maxReleaseNameLen = 53
 	// maxMetadataNameLen is the maximum length Kubernetes allows for any name.
 	maxMetadataNameLen = 253
